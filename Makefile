@@ -26,8 +26,16 @@ remote:
 
 
 clientremote:
-	GST_DEBUG=WARN gst-launch-1.0 playbin latency=0 uri=rtsp://192.168.178.53:8554/test
+	GST_DEBUG=WARN gst-launch-1.0 playbin latency=100 uri=rtsp://192.168.178.53:8554/test
 
 
 mictest:
 	gst-launch-1.0 pulsesrc ! audiochebband mode=band-pass lower-frequency=100 upper-frequency=6000 poles=4 ! audioconvert  ! queue min-threshold-time=1000000000 ! autoaudiosink
+
+
+
+# test to transmit audio:
+# server:
+# GST_DEBUG=WARN gst-launch-1.0 pulsesrc ! audio/x-raw,rate=44100 ! audioconvert ! queue min-threshold-time=1000000000 ! avenc_aac ! rtpmp4apay ! udpsink host=192.168.178.56 port=5001
+# client:
+# GST_DEBUG=WARN gst-launch-1.0 udpsrc port=5001 caps="application/x-rtp,media=(string)audio,clock-rate=44100,config=40002410adca00" ! rtpmp4adepay !  avdec_aac ! audioconvert ! queue ! alsasink

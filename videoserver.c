@@ -30,12 +30,16 @@
 
 #ifdef PI
 
+// #define LAUNCHLINE                                                             \
+//   "pulsesrc volume=2 ! audio/x-raw,rate=44100 ! audioconvert ! avenc_aac ! "   \
+//   "rtpmp4apay name=pay0 "
 #define LAUNCHLINE                                                             \
   "rpicamsrc sensor-mode=7 preview=false bitrate=1000000 "                     \
   "keyframe-interval=25 name=src ! "                                           \
   "video/x-h264,width=320,height=240,fps=10 ! h264parse ! "                    \
-  "rtph264pay name=pay0 pt=96 "                                                 \
-  "pulsesrc volume=2 ! audioconvert ! avenc_ac3 ! rtpac3pay name=pay1 "
+  "rtph264pay name=pay0 pt=96 "                                                \
+  "pulsesrc volume=2 ! audio/x-raw,rate=44100 ! audioconvert ! avenc_aac ! "   \
+  "rtpmp4apay name=pay1 pt=97 "
 
 #else
 
@@ -150,7 +154,7 @@ static guint initVolumePipeline(GstElement *pipeline) {
   g_object_set(G_OBJECT(level), "interval", (guint64)100000000, NULL);
   g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)5, NULL);
   /* run synced and not as fast as we can */
-  g_object_set(G_OBJECT(fakesink), "sync", FALSE, NULL);
+  g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);
   g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
 
   bus = gst_element_get_bus(pipeline);
