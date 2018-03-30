@@ -35,7 +35,7 @@
   "keyframe-interval=25 name=src ! "                                           \
   "video/x-h264,width=320,height=240,fps=10 ! h264parse ! "                    \
   "rtph264pay name=pay0 pt=96 "                                                 \
-  " pulsesrc ! audio/x-raw,channels=2 ! audioconvert ! queue ! avenc_ac3 bitrate=192000 ! rtpac3pay pt=97 name=pay1 "
+  "pulsesrc volume=2 ! audioconvert ! avenc_ac3 ! rtpac3pay name=pay1 "
 
 #else
 
@@ -87,7 +87,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.7) {
+    if (rms > 0.2) {
       g_print("RMS: %f dB, peak: %f dB, decay: %f dB ", rms_dB, peak_dB,
               decay_dB);
       g_print("normalized rms value: %f\n", rms);
@@ -147,7 +147,8 @@ static guint initVolumePipeline(GstElement *pipeline) {
 
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
-  g_object_set(G_OBJECT(level), "interval", 100000000, NULL);
+  g_object_set(G_OBJECT(level), "interval", (guint64)100000000, NULL);
+  g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)5, NULL);
   /* run synced and not as fast as we can */
   g_object_set(G_OBJECT(fakesink), "sync", FALSE, NULL);
   g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
