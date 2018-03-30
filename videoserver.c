@@ -28,6 +28,23 @@
 
 #define DEFAULT_RTSP_PORT "8554"
 
+#ifdef PI
+
+#define LAUNCHLINE                                                             \
+  "rpicamsrc sensor-mode=7 preview=false bitrate=1000000 "                     \
+  "keyframe-interval=25 name=src ! "                                           \
+  "video/x-h264,width=320,height=240,fps=10 ! h264parse ! "                    \
+  "rtph264pay name=pay0 pt=96 "                                                 \
+  " pulsesrc ! audio/x-raw,channels=2 ! audioconvert ! queue ! avenc_ac3 bitrate=192000 ! rtpac3pay pt=97 name=pay1 "
+
+#else
+
+#define LAUNCHLINE                                                             \
+  "v4l2src ! video/x-raw,width=640,height=480 ! x264enc ! rtph264pay "         \
+  "name=pay0 pt=96"
+
+#endif
+
 static char *port = (char *)DEFAULT_RTSP_PORT;
 
 static GOptionEntry entries[] = {
@@ -98,31 +115,28 @@ static guint handleOptions(int *argc, char **argv[]) {
   return 0;
 }
 
-static guint initVolumePipeline() {
-
-  GstElement *audiotestsrc, *audioconvert, *level, *fakesink, *volume;
-  GstElement *pipeline;
+static guint initVolumePipeline(GstElement *pipeline) {
+  GstElement *audiosrc, *audioconvert, *level, *fakesink, *volume;
   GstCaps *caps;
   GstBus *bus;
   guint watch_id;
 
   caps = gst_caps_from_string("audio/x-raw,channels=2");
 
-  pipeline = gst_pipeline_new(NULL);
-  audiotestsrc = gst_element_factory_make("pulsesrc", NULL);
+  audiosrc = gst_element_factory_make("pulsesrc", NULL);
   audioconvert = gst_element_factory_make("audioconvert", NULL);
   level = gst_element_factory_make("level", NULL);
   volume = gst_element_factory_make("volume", NULL);
   fakesink = gst_element_factory_make("fakesink", NULL);
 
-  if (!pipeline || !audiotestsrc || !audioconvert || !volume || !level ||
+  if (!pipeline || !audiosrc || !audioconvert || !volume || !level ||
       !fakesink) {
     g_error("failed to create elements");
   }
 
-  gst_bin_add_many(GST_BIN(pipeline), audiotestsrc, audioconvert, volume, level,
+  gst_bin_add_many(GST_BIN(pipeline), audiosrc, audioconvert, volume, level,
                    fakesink, NULL);
-  if (!gst_element_link(audiotestsrc, audioconvert))
+  if (!gst_element_link(audiosrc, audioconvert))
     g_error("Failed to link audiotestsrc and audioconvert");
   if (!gst_element_link(audioconvert, volume))
     g_error("Failed to link audioconvert and level");
@@ -134,9 +148,8 @@ static guint initVolumePipeline() {
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
   g_object_set(G_OBJECT(level), "interval", 100000000, NULL);
-  // g_object_set (G_OBJECT (level), "peak-falloff", 10, NULL);
   /* run synced and not as fast as we can */
-  g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);
+  g_object_set(G_OBJECT(fakesink), "sync", FALSE, NULL);
   g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
 
   bus = gst_element_get_bus(pipeline);
@@ -147,6 +160,19 @@ static guint initVolumePipeline() {
   return watch_id;
 }
 
+/* this timeout is periodically run to clean up the expired sessions from the
+ * pool. This needs to be run explicitly currently but might be done
+ * automatically as part of the mainloop. */
+static gboolean timeout(GstRTSPServer *server) {
+  GstRTSPSessionPool *pool;
+
+  pool = gst_rtsp_server_get_session_pool(server);
+  gst_rtsp_session_pool_cleanup(pool);
+  g_object_unref(pool);
+
+  return TRUE;
+}
+
 int main(int argc, char *argv[]) {
   int optsResult = handleOptions(&argc, &argv);
   if (optsResult != 0) {
@@ -155,16 +181,17 @@ int main(int argc, char *argv[]) {
 
   gst_init(&argc, &argv);
 
-  guint watch_id = initVolumePipeline();
+  GstElement *audioPipeline = gst_pipeline_new(NULL);
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+
+  guint watch_id = initVolumePipeline(audioPipeline);
 
   GstRTSPServer *server = gst_rtsp_server_new();
   g_object_set(server, "service", port, NULL);
   GstRTSPMountPoints *mounts = gst_rtsp_server_get_mount_points(server);
   GstRTSPMediaFactory *factory = gst_rtsp_media_factory_new();
+  gst_rtsp_media_factory_set_launch(factory, LAUNCHLINE);
   gst_rtsp_media_factory_set_shared(factory, TRUE);
-  gst_rtsp_media_factory_set_launch(
-      factory, "v4l2src ! video/x-raw,width=640,height=480 ! x264enc ! "
-               "rtph264pay name=pay0 pt=96");
 
   gst_rtsp_mount_points_add_factory(mounts, "/test", factory);
 
@@ -173,9 +200,16 @@ int main(int argc, char *argv[]) {
   gst_rtsp_server_attach(server, NULL);
 
   g_print("stream ready at rtsp://127.0.0.1:%s/test\n", port);
-  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+
+  /* add a timeout for the session cleanup */
+  // g_timeout_add_seconds (2, (GSourceFunc) timeout, server);
+
   g_main_loop_run(loop);
 
+  g_print("loop finished\n", port);
+  g_print("stopping pipeline\n", port);
+  gst_element_set_state(audioPipeline, GST_STATE_NULL);
+  g_object_unref(audioPipeline);
   g_source_remove(watch_id);
   g_main_loop_unref(loop);
   return 0;
