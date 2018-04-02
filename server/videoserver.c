@@ -94,10 +94,10 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.2) {
-      g_print("RMS: %f dB, peak: %f dB, decay: %f dB ", rms_dB, peak_dB,
-              decay_dB);
-      g_print("normalized rms value: %f\n", rms);
+    if (rms > 0.15) {
+      g_print(
+          "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
+          rms_dB, peak_dB, decay_dB, rms);
     }
   }
   /* we handled the message we want, and ignored the ones we didn't want.
