@@ -1,0 +1,24 @@
+{
+  "name": "babyphone",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frairon/babyphone.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/frairon/babyphone/issues"
+  },
+  "homepage": "https://github.com/frairon/babyphone#readme",
+  "dependencies": {
+    "express": "^4.16.3",
+    "ws": "^5.1.0"
+  }
+}

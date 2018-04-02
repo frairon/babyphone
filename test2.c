@@ -1,139 +1,224 @@
-/* GStreamer
- * Copyright (C) 2008 Wim Taymans <wim.taymans at gmail.com>
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
- * Boston, MA 02110-1301, USA.
- */
-
 #include <gst/gst.h>
+#include <stdio.h>
 
-#include <gst/rtsp-server/rtsp-server.h>
+/* Structure to contain all our information, so we can pass it around */
+typedef struct _CustomData {
+  GstElement *playbin; /* Our one and only element */
 
-typedef struct
-{
-  gboolean white;
-  GstClockTime timestamp;
-} MyContext;
+  gint n_video; /* Number of embedded video streams */
+  gint n_audio; /* Number of embedded audio streams */
+  gint n_text;  /* Number of embedded subtitle streams */
 
-/* called when we need to give data to appsrc */
-static void
-need_data (GstElement * appsrc, guint unused, MyContext * ctx)
-{
-  GstBuffer *buffer;
-  guint size;
-  GstFlowReturn ret;
+  gint current_video; /* Currently playing video stream */
+  gint current_audio; /* Currently playing audio stream */
+  gint current_text;  /* Currently playing subtitle stream */
 
-  size = 385 * 288 * 2;
+  GMainLoop *main_loop; /* GLib's Main Loop */
+} CustomData;
 
-  buffer = gst_buffer_new_allocate (NULL, size, NULL);
+/* playbin flags */
+typedef enum {
+  GST_PLAY_FLAG_VIDEO = (1 << 0), /* We want video output */
+  GST_PLAY_FLAG_AUDIO = (1 << 1), /* We want audio output */
+  GST_PLAY_FLAG_TEXT = (1 << 2)   /* We want subtitle output */
+} GstPlayFlags;
 
-  /* this makes the image black/white */
-  gst_buffer_memset (buffer, 0, ctx->white ? 0xff : 0x0, size);
+/* Forward definition for the message and keyboard processing functions */
+static gboolean handle_message(GstBus *bus, GstMessage *msg, CustomData *data);
+static gboolean handle_keyboard(GIOChannel *source, GIOCondition cond,
+                                CustomData *data);
 
-  ctx->white = !ctx->white;
+int main(int argc, char *argv[]) {
+  CustomData data;
+  GstBus *bus;
+  GstStateChangeReturn ret;
+  gint flags;
+  GIOChannel *io_stdin;
 
-  /* increment the timestamp every 1/2 second */
-  GST_BUFFER_PTS (buffer) = ctx->timestamp;
-  GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale_int (1, GST_SECOND, 2);
-  ctx->timestamp += GST_BUFFER_DURATION (buffer);
+  /* Initialize GStreamer */
+  gst_init(&argc, &argv);
 
-  g_signal_emit_by_name (appsrc, "push-buffer", buffer, &ret);
-}
+  /* Create the elements */
+  data.playbin = gst_element_factory_make("playbin", "playbin");
 
-/* called when a new media pipeline is constructed. We can query the
- * pipeline and configure our appsrc */
-static void
-media_configure (GstRTSPMediaFactory * factory, GstRTSPMedia * media,
-    gpointer user_data)
-{
-  GstElement *element, *appsrc;
-  MyContext *ctx;
+  if (!data.playbin) {
+    g_printerr("Not all elements could be created.\n");
+    return -1;
+  }
 
-  /* get the element used for providing the streams of the media */
-  element = gst_rtsp_media_get_element (media);
+  /* Set the URI to play */
+  g_object_set(data.playbin, "uri", "rtsp://192.168.1.9:8554/test", NULL);
+  g_object_set(data.playbin, "latency", (guint64)0, NULL);
 
-  /* get our appsrc, we named it 'mysrc' with the name property */
-  appsrc = gst_bin_get_by_name_recurse_up (GST_BIN (element), "mysrc");
+  /* Set flags to show Audio and Video but ignore Subtitles */
+  g_object_get(data.playbin, "flags", &flags, NULL);
+  flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+  flags &= ~GST_PLAY_FLAG_TEXT;
+  g_object_set(data.playbin, "flags", flags, NULL);
 
-  /* this instructs appsrc that we will be dealing with timed buffer */
-  gst_util_set_object_arg (G_OBJECT (appsrc), "format", "time");
-  /* configure the caps of the video */
-  g_object_set (G_OBJECT (appsrc), "caps",
-      gst_caps_new_simple ("video/x-raw",
-          "format", G_TYPE_STRING, "RGB16",
-          "width", G_TYPE_INT, 384,
-          "height", G_TYPE_INT, 288,
-          "framerate", GST_TYPE_FRACTION, 0, 1, NULL), NULL);
+  /* Set connection speed. This will affect some internal decisions of playbin
+   */
+  g_object_set(data.playbin, "connection-speed", 56, NULL);
 
-  ctx = g_new0 (MyContext, 1);
-  ctx->white = FALSE;
-  ctx->timestamp = 0;
-  /* make sure ther datais freed when the media is gone */
-  g_object_set_data_full (G_OBJECT (media), "my-extra-data", ctx,
-      (GDestroyNotify) g_free);
+  /* Add a bus watch, so we get notified when a message arrives */
+  bus = gst_element_get_bus(data.playbin);
+  gst_bus_add_watch(bus, (GstBusFunc)handle_message, &data);
 
-  /* install the callback that will be called when a buffer is needed */
-  g_signal_connect (appsrc, "need-data", (GCallback) need_data, ctx);
-  gst_object_unref (appsrc);
-  gst_object_unref (element);
-}
+  /* Add a keyboard watch so we get notified of keystrokes */
+  io_stdin = g_io_channel_unix_new(fileno(stdin));
+  g_io_add_watch(io_stdin, G_IO_IN, (GIOFunc)handle_keyboard, &data);
 
-int
-main (int argc, char *argv[])
-{
-  GMainLoop *loop;
-  GstRTSPServer *server;
-  GstRTSPMountPoints *mounts;
-  GstRTSPMediaFactory *factory;
+  /* Start playing */
+  ret = gst_element_set_state(data.playbin, GST_STATE_PLAYING);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    g_printerr("Unable to set the pipeline to the playing state.\n");
+    gst_object_unref(data.playbin);
+    return -1;
+  }
 
-  gst_init (&argc, &argv);
+  /* Create a GLib Main Loop and set it to run */
+  data.main_loop = g_main_loop_new(NULL, FALSE);
+  g_main_loop_run(data.main_loop);
 
-  loop = g_main_loop_new (NULL, FALSE);
-
-  /* create a server instance */
-  server = gst_rtsp_server_new ();
-
-  /* get the mount points for this server, every server has a default object
-   * that be used to map uri mount points to media factories */
-  mounts = gst_rtsp_server_get_mount_points (server);
-
-  /* make a media factory for a test stream. The default media factory can use
-   * gst-launch syntax to create pipelines.
-   * any launch line works as long as it contains elements named pay%d. Each
-   * element with pay%d names will be a stream */
-  factory = gst_rtsp_media_factory_new ();
-  gst_rtsp_media_factory_set_launch (factory,
-      "( appsrc name=mysrc ! videoconvert ! x264enc ! rtph264pay name=pay0 pt=96 )");
-
-  /* notify when our media is ready, This is called whenever someone asks for
-   * the media and a new pipeline with our appsrc is created */
-  g_signal_connect (factory, "media-configure", (GCallback) media_configure,
-      NULL);
-
-  /* attach the test factory to the /test url */
-  gst_rtsp_mount_points_add_factory (mounts, "/test", factory);
-
-  /* don't need the ref to the mounts anymore */
-  g_object_unref (mounts);
-
-  /* attach the server to the default maincontext */
-  gst_rtsp_server_attach (server, NULL);
-
-  /* start serving */
-  g_print ("stream ready at rtsp://127.0.0.1:8554/test\n");
-  g_main_loop_run (loop);
-
+  /* Free resources */
+  g_main_loop_unref(data.main_loop);
+  g_io_channel_unref(io_stdin);
+  gst_object_unref(bus);
+  gst_element_set_state(data.playbin, GST_STATE_NULL);
+  gst_object_unref(data.playbin);
   return 0;
+}
+
+/* Extract some metadata from the streams and print it on the screen */
+static void analyze_streams(CustomData *data) {
+  gint i;
+  GstTagList *tags;
+  gchar *str;
+  guint rate;
+
+  /* Read some properties */
+  g_object_get(data->playbin, "n-video", &data->n_video, NULL);
+  g_object_get(data->playbin, "n-audio", &data->n_audio, NULL);
+  g_object_get(data->playbin, "n-text", &data->n_text, NULL);
+
+  g_print("%d video stream(s), %d audio stream(s), %d text stream(s)\n",
+          data->n_video, data->n_audio, data->n_text);
+
+  g_print("\n");
+  for (i = 0; i < data->n_video; i++) {
+    tags = NULL;
+    /* Retrieve the stream's video tags */
+    g_signal_emit_by_name(data->playbin, "get-video-tags", i, &tags);
+    if (tags) {
+      g_print("video stream %d:\n", i);
+      gst_tag_list_get_string(tags, GST_TAG_VIDEO_CODEC, &str);
+      g_print("  codec: %s\n", str ? str : "unknown");
+      g_free(str);
+      gst_tag_list_free(tags);
+    }
+  }
+
+  g_print("\n");
+  for (i = 0; i < data->n_audio; i++) {
+    tags = NULL;
+    /* Retrieve the stream's audio tags */
+    g_signal_emit_by_name(data->playbin, "get-audio-tags", i, &tags);
+    if (tags) {
+      g_print("audio stream %d:\n", i);
+      if (gst_tag_list_get_string(tags, GST_TAG_AUDIO_CODEC, &str)) {
+        g_print("  codec: %s\n", str);
+        g_free(str);
+      }
+      if (gst_tag_list_get_string(tags, GST_TAG_LANGUAGE_CODE, &str)) {
+        g_print("  language: %s\n", str);
+        g_free(str);
+      }
+      if (gst_tag_list_get_uint(tags, GST_TAG_BITRATE, &rate)) {
+        g_print("  bitrate: %d\n", rate);
+      }
+      gst_tag_list_free(tags);
+    }
+  }
+
+  g_print("\n");
+  for (i = 0; i < data->n_text; i++) {
+    tags = NULL;
+    /* Retrieve the stream's subtitle tags */
+    g_signal_emit_by_name(data->playbin, "get-text-tags", i, &tags);
+    if (tags) {
+      g_print("subtitle stream %d:\n", i);
+      if (gst_tag_list_get_string(tags, GST_TAG_LANGUAGE_CODE, &str)) {
+        g_print("  language: %s\n", str);
+        g_free(str);
+      }
+      gst_tag_list_free(tags);
+    }
+  }
+
+  g_object_get(data->playbin, "current-video", &data->current_video, NULL);
+  g_object_get(data->playbin, "current-audio", &data->current_audio, NULL);
+  g_object_get(data->playbin, "current-text", &data->current_text, NULL);
+
+  g_print("\n");
+  g_print(
+      "Currently playing video stream %d, audio stream %d and text stream %d\n",
+      data->current_video, data->current_audio, data->current_text);
+  g_print("Type any number and hit ENTER to select a different audio stream\n");
+}
+
+/* Process messages from GStreamer */
+static gboolean handle_message(GstBus *bus, GstMessage *msg, CustomData *data) {
+  GError *err;
+  gchar *debug_info;
+
+  switch (GST_MESSAGE_TYPE(msg)) {
+  case GST_MESSAGE_ERROR:
+    gst_message_parse_error(msg, &err, &debug_info);
+    g_printerr("Error received from element %s: %s\n",
+               GST_OBJECT_NAME(msg->src), err->message);
+    g_printerr("Debugging information: %s\n", debug_info ? debug_info : "none");
+    g_clear_error(&err);
+    g_free(debug_info);
+    g_main_loop_quit(data->main_loop);
+    break;
+  case GST_MESSAGE_EOS:
+    g_print("End-Of-Stream reached.\n");
+    g_main_loop_quit(data->main_loop);
+    break;
+  case GST_MESSAGE_STATE_CHANGED: {
+    GstState old_state, new_state, pending_state;
+    gst_message_parse_state_changed(msg, &old_state, &new_state,
+                                    &pending_state);
+    if (GST_MESSAGE_SRC(msg) == GST_OBJECT(data->playbin)) {
+      if (new_state == GST_STATE_PLAYING) {
+        /* Once we are in the playing state, analyze the streams */
+        analyze_streams(data);
+      }
+    }
+  } break;
+  }
+
+  /* We want to keep receiving messages */
+  return TRUE;
+}
+
+/* Process keyboard input */
+static gboolean handle_keyboard(GIOChannel *source, GIOCondition cond,
+                                CustomData *data) {
+  gchar *str = NULL;
+
+  if (g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
+      G_IO_STATUS_NORMAL) {
+    int index = g_ascii_strtoull(str, NULL, 0);
+    if (index < 0 || index >= data->n_audio) {
+      g_printerr("Index out of bounds\n");
+    } else {
+      /* If the input was a valid audio stream index, set the current audio
+       * stream */
+      g_print("Setting current audio stream to %d\n", index);
+      g_object_set(data->playbin, "current-audio", index, NULL);
+    }
+  }
+  g_free(str);
+  return TRUE;
 }

@@ -33,9 +33,12 @@
 #define LAUNCHLINE                                                             \
   "rpicamsrc sensor-mode=7 preview=false bitrate=1000000 "                     \
   "keyframe-interval=25 name=src ! "                                           \
-  "video/x-h264,width=320,height=240,fps=10 ! h264parse ! "                    \
-  "rtph264pay name=pay0 pt=96 "                                                 \
-  "pulsesrc volume=2 ! audioconvert ! avenc_ac3 ! rtpac3pay name=pay1 "
+  "video/x-h264,width=640,height=480,fps=10 ! h264parse ! "                    \
+  "rtph264pay name=pay0 pt=96 "                                                \
+  "pulsesrc "                                                                  \
+  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
+  "volume=2 !  audio/x-raw,rate=44100 ! audioconvert ! audioresample ! "       \
+  "avenc_ac3 hard-resync=true ! rtpac3pay name=pay1 pt=97 "
 
 #else
 
@@ -62,6 +65,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
     if (strcmp(name, "level") != 0) {
       return TRUE;
     }
+
     gint channels;
     GstClockTime endtime;
     gdouble rms_dB, peak_dB, decay_dB;
@@ -145,6 +149,9 @@ static guint initVolumePipeline(GstElement *pipeline) {
   if (!gst_element_link(level, fakesink))
     g_error("Failed to link level and fakesink");
 
+  g_object_set(G_OBJECT(audiosrc), "device",
+               "alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono",
+               NULL);
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
   g_object_set(G_OBJECT(level), "interval", (guint64)100000000, NULL);
