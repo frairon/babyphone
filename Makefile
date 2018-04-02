@@ -1,5 +1,5 @@
 
-
+CAMHOST=192.168.178.53
 
 client:
 	GST_DEBUG=WARN gst-launch-1.0 playbin uri=rtsp://127.0.0.1:8554/test
@@ -24,11 +24,11 @@ remote:
 	scp server/*.* camhost:/home/pi/babyphone/
 	ssh camhost 'cd /home/pi/babyphone && gcc -D PI `pkg-config --cflags glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0`  videoserver.c -o videoserver `pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0` -lm'
 	#ssh camhost 'GST_DEBUG=WARN /tmp/videoserver & read; kill $$!'
-	ssh camhost 'cd /home/pi/babyphone; npm start & read; kill $$!'
+	ssh camhost 'cd /home/pi/babyphone; npm start & read; killall node'
 
 
 clientremote:
-	GST_DEBUG=WARN gst-launch-1.0 -m playbin connection-speed=56 latency=100000000 uri=rtsp://192.168.1.9:8554/test
+	GST_DEBUG=WARN gst-launch-1.0 -m playbin connection-speed=56 latency=100000000 uri=rtsp://${CAMHOST}:8554/test
 
 
 mictest:
