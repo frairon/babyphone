@@ -13,7 +13,7 @@ wss.on('connection', function connection(ws) {
       var d = JSON.parse(data);
       ws.send(JSON.stringify({"volume":d['normrms']}));
     }catch(err){
-      // ignore non-json-output
+      console.log(data);
     }
   });
 });

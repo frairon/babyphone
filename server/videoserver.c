@@ -24,6 +24,7 @@
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include <gst/gst.h>
+#include <gst/net/gstnettimeprovider.h>
 #include <gst/rtsp-server/rtsp-server.h>
 
 #define DEFAULT_RTSP_PORT "8554"
@@ -34,14 +35,15 @@
 //   "pulsesrc volume=2 ! audio/x-raw,rate=44100 ! audioconvert ! avenc_aac ! "   \
 //   "rtpmp4apay name=pay0 "
 #define LAUNCHLINE                                                             \
-  "rpicamsrc sensor-mode=7 preview=false bitrate=1000000 "                     \
-  "keyframe-interval=25 name=src ! "                                           \
-  "video/x-h264,width=640,height=480,fps=10 ! h264parse ! "                    \
+  "rpicamsrc sensor-mode=7 preview=false framerate=15 bitrate=10000000 "                     \
+  "keyframe-interval=15 name=src ! "                                           \
+  "video/x-h264,width=800,height=600,fps=15 ! h264parse ! "                    \
   "rtph264pay name=pay0 pt=96 "                                                \
   "pulsesrc "                                                                  \
   "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
-  "volume=2 !  audio/x-raw,rate=44100 ! audioconvert ! audioresample ! "       \
-  "avenc_ac3 hard-resync=true ! rtpac3pay name=pay1 pt=97 "
+  "volume=2 ! audio/x-raw,rate=32000 ! audioconvert ! audioresample ! "        \
+  " audio/x-raw,rate=32000 ! "                                                 \
+  "avenc_ac3 hard-resync=false bitrate=32000 ! rtpac3pay name=pay1 pt=97 "
 
 #else
 
@@ -94,7 +96,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.15) {
+    if (rms > 0.5) {
       g_print(
           "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
           rms_dB, peak_dB, decay_dB, rms);
@@ -197,12 +199,16 @@ int main(int argc, char *argv[]) {
 
   guint watch_id = initVolumePipeline(audioPipeline);
 
+  GstClock *clock = gst_system_clock_obtain();
+  gst_net_time_provider_new(clock, "0.0.0.0", 8554);
+
   GstRTSPServer *server = gst_rtsp_server_new();
   g_object_set(server, "service", port, NULL);
   GstRTSPMountPoints *mounts = gst_rtsp_server_get_mount_points(server);
   GstRTSPMediaFactory *factory = gst_rtsp_media_factory_new();
   gst_rtsp_media_factory_set_launch(factory, LAUNCHLINE);
   gst_rtsp_media_factory_set_shared(factory, TRUE);
+  gst_rtsp_media_factory_set_clock(factory, clock);
 
   gst_rtsp_mount_points_add_factory(mounts, "/test", factory);
 

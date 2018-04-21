@@ -24,6 +24,8 @@
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include <gst/gst.h>
+#include <gst/net/gstnet.h>
+#include <gst/net/gstnettimeprovider.h>
 
 typedef struct {
   GstElement *pipeline;
@@ -80,10 +82,24 @@ int main(int argc, char *argv[]) {
 
   gst_init(&argc, &argv);
 
+
+  GstClock *net_clock = gst_net_client_clock_new ("net_clock", "192.168.178.53", 8554, 0);
+  if (net_clock == NULL) {
+    g_print ("Failed to create net clock client for %s:%d\n",
+        "192.168.178.53", 8554);
+    return 1;
+  }
+
+  /* Wait for the clock to stabilise */
+  gst_clock_wait_for_sync (net_clock, GST_CLOCK_TIME_NONE);
+
   GstElement *rtspSrc, *sink;
   ConsumerPipeline cp;
   GstElement *pipeline = gst_pipeline_new(NULL);
   GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+
+
+  gst_pipeline_use_clock (GST_PIPELINE (pipeline), net_clock);
 
   rtspSrc = gst_element_factory_make("rtspsrc", NULL);
   cp.audiosink = gst_element_factory_make("rtpjitterbuffer", NULL);
@@ -96,7 +112,7 @@ int main(int argc, char *argv[]) {
   GstElement *audioDecoder = gst_element_factory_make("a52dec", NULL);
   GstElement *audioSink = gst_element_factory_make("autoaudiosink", NULL);
 
-  g_object_set(G_OBJECT(rtspSrc), "location", "rtsp://192.168.1.9:8554/test",
+  g_object_set(G_OBJECT(rtspSrc), "location", "rtsp://192.168.178.53:8554/test",
                NULL);
   g_object_set(G_OBJECT(rtspSrc), "debug", TRUE, NULL);
   g_object_set(G_OBJECT(rtspSrc), "latency", (guint64)1, NULL);
