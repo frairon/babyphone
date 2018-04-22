@@ -5,14 +5,20 @@ const wss = new WebSocket.Server({
   port: 8080
 });
 
-var vidServer = spawn('./videoserver', []);
+var vidServer = spawn('./videoserver', [], {
+  'env': {
+    'GST_DEBUG': 'WARN'
+  }
+});
 
 wss.on('connection', function connection(ws) {
   vidServer.stdout.on('data', function(data) {
-    try{
+    try {
       var d = JSON.parse(data);
-      ws.send(JSON.stringify({"volume":d['normrms']}));
-    }catch(err){
+      ws.send(JSON.stringify({
+        "volume": d['normrms']
+      }));
+    } catch(err) {
       console.log(data);
     }
   });
@@ -31,7 +37,7 @@ vidServer.on('exit', function(code) {
 });
 
 
-function shutdown(){
+function shutdown() {
   console.log("shutting down by signal.");
   vidServer.kill('SIGTERM');
   process.exit(0);

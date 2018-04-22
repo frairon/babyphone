@@ -4,7 +4,7 @@ CAMHOST=192.168.178.53
 .PHONY: client
 
 client:
-	GST_DEBUG=WARN gst-launch-1.0 playbin latency=250000000 uri=rtsp://$(CAMHOST):8554/test
+	GST_DEBUG=WARN gst-launch-1.0 playbin latency=100000000 uri=rtsp://$(CAMHOST):8554/test
 
 
 test1:
@@ -27,7 +27,7 @@ remote:
 	ssh camhost 'pm2 restart index'
 
 remote-logs:
-	ssh camhost 'pm2 logs index'
+	ssh camhost 'pm2 logs index --lines=100'
 
 
 clientremote:

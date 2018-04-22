@@ -30,20 +30,60 @@
 #define DEFAULT_RTSP_PORT "8554"
 
 #ifdef PI
-
-// #define LAUNCHLINE                                                             \
-//   "pulsesrc volume=2 ! audio/x-raw,rate=44100 ! audioconvert ! avenc_aac ! "   \
+// keyframe-interval=60
+// #define LAUNCHLINE \
+//   "pulsesrc volume=2 ! audio/x-raw,rate=44100 ! audioconvert ! avenc_aac ! "
+//   \
 //   "rtpmp4apay name=pay0 "
+
+// AUDIO with cuttoff and ac3
 #define LAUNCHLINE                                                             \
-  "rpicamsrc sensor-mode=7 preview=false framerate=15 bitrate=10000000 "                     \
-  "keyframe-interval=15 name=src ! "                                           \
-  "video/x-h264,width=800,height=600,fps=15 ! h264parse ! "                    \
+  "pulsesrc "                                                                  \
+  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
+  "volume=0.8 ! audio/x-raw,rate=44100 ! "                                     \
+  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
+  " audioconvert ! audioresample ! "                                           \
+  " audio/x-raw,rate=32000 ! "                                                 \
+  "avenc_ac3 hard-resync=false bitrate=32000 ! "                               \
+  " rtpac3pay name=pay0 pt=97 "
+
+// AUDIO with cuttoff and vorbis
+#define LAUNCHLINE                                                             \
+  "pulsesrc "                                                                  \
+  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
+  "volume=0.8 ! audio/x-raw,rate=44100 ! "                                     \
+  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
+  " audioconvert ! audioresample ! "                                           \
+  " audio/x-raw,rate=32000 ! "                                                 \
+  "vorbisenc ! "                                                               \
+  " rtpvorbispay config-interval=10 name=pay0 pt=97 "
+
+// audio and video in separate streams
+#define LAUNCHLINE                                                             \
+  "rpicamsrc preview=false "                                                   \
+  " ! "                                                                        \
+  "video/x-h264,width=800,height=600,fps=15,profile=baseline,bitrate=5000000"  \
+  "! h264parse ! queue ! "                                                     \
   "rtph264pay name=pay0 pt=96 "                                                \
   "pulsesrc "                                                                  \
   "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
-  "volume=2 ! audio/x-raw,rate=32000 ! audioconvert ! audioresample ! "        \
-  " audio/x-raw,rate=32000 ! "                                                 \
-  "avenc_ac3 hard-resync=false bitrate=32000 ! rtpac3pay name=pay1 pt=97 "
+  "volume=0.8 ! audio/x-raw,rate=32000 ! "                                     \
+  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
+  "vorbisenc ! queue ! "                                                       \
+  "rtpvorbispay config-interval=10 name=pay1 pt=97 "
+
+// Audio and video muxed together
+// #define LAUNCHLINE \
+//   "rpicamsrc preview=false ! " \
+//   "video/x-h264,width=800,height=600,fps=15, " \
+//   "profile=baseline,bitrate=5000000 ! " \
+//   "h264parse ! queue ! " \
+//   "mpegtsmux name=muxer ! queue ! rtpmp2tpay name=pay0 pt=96 " \
+//   "pulsesrc " \
+//   "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono ! " \
+//   "audio/x-raw,rate=44100,channels=1 ! " \
+//   "audioconvert ! queue ! avenc_aac compliance=-2 ! aacparse ! queue ! " \
+//   "muxer. "
 
 #else
 
