@@ -37,40 +37,57 @@
 //   "rtpmp4apay name=pay0 "
 
 // AUDIO with cuttoff and ac3
-#define LAUNCHLINE                                                             \
-  "pulsesrc "                                                                  \
-  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
-  "volume=0.8 ! audio/x-raw,rate=44100 ! "                                     \
-  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
-  " audioconvert ! audioresample ! "                                           \
-  " audio/x-raw,rate=32000 ! "                                                 \
-  "avenc_ac3 hard-resync=false bitrate=32000 ! "                               \
-  " rtpac3pay name=pay0 pt=97 "
+// #define LAUNCHLINE \
+//   "pulsesrc " \
+//   "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono " \
+//   "volume=0.8 ! audio/x-raw,rate=44100 ! " \
+//   "audiocheblimit mode=high-pass cutoff=100 poles=4 ! " \
+//   " audioconvert ! audioresample ! " \
+//   " audio/x-raw,rate=32000 ! " \
+//   "avenc_ac3 hard-resync=false bitrate=32000 ! " \
+//   " rtpac3pay name=pay0
+//   pt=97 "
 
 // AUDIO with cuttoff and vorbis
-#define LAUNCHLINE                                                             \
+// #define LAUNCHLINE \
+//   "pulsesrc " \
+//   "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono " \
+//   "volume=0.8 ! audio/x-raw,rate=44100 ! " \
+//   "audiocheblimit mode=high-pass cutoff=100 poles=4 ! " \
+//   " audioconvert ! audioresample ! " \
+//   " audio/x-raw,rate=32000 ! " \
+//   "vorbisenc ! " \
+//   " rtpvorbispay config-interval=10 name=pay0 pt=97 "
+
+// #define AUDIO_LAUNCHLINE                                                       \
+//   "pulsesrc "                                                                  \
+//   "device=alsa_input.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00."    \
+//   "analog-mono "                                                               \
+//   "! audio/x-raw,rate=16000,channels=1 "                                       \
+//   "! avenc_g722 "                                                              \
+//   "! audio/G722, rate=16000, channels=1 "                                      \
+//   "! rtpg722pay name=pay0 pt=9"
+#define DEVICE                                                                 \
+  "alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-mono"
+
+#define AUDIO_LAUNCHLINE                                                       \
   "pulsesrc "                                                                  \
-  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
-  "volume=0.8 ! audio/x-raw,rate=44100 ! "                                     \
-  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
-  " audioconvert ! audioresample ! "                                           \
-  " audio/x-raw,rate=32000 ! "                                                 \
-  "vorbisenc ! "                                                               \
-  " rtpvorbispay config-interval=10 name=pay0 pt=97 "
+  "device=" DEVICE " ! audio/x-raw,rate=16000,channels=1 "                      \
+  "! avenc_g722 "                                                              \
+  "! audio/G722, rate=16000, channels=1 "                                      \
+  "! rtpg722pay name=pay0 pt=9"
 
 // audio and video in separate streams
-#define LAUNCHLINE                                                             \
-  "rpicamsrc preview=false "                                                   \
-  " ! "                                                                        \
-  "video/x-h264,width=800,height=600,fps=15,profile=baseline,bitrate=5000000"  \
-  "! h264parse ! queue ! "                                                     \
-  "rtph264pay name=pay0 pt=96 "                                                \
+#define AV_LAUNCHLINE                                                          \
   "pulsesrc "                                                                  \
-  "device=alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono "       \
-  "volume=0.8 ! audio/x-raw,rate=32000 ! "                                     \
-  "audiocheblimit mode=high-pass cutoff=100 poles=4 ! "                        \
-  "vorbisenc ! queue ! "                                                       \
-  "rtpvorbispay config-interval=10 name=pay1 pt=97 "
+  "device=" DEVICE " ! audio/x-raw,rate=16000,channels=1 "                      \
+  "! avenc_g722 "                                                              \
+  "! audio/G722, rate=16000, channels=1 "                                      \
+  "! rtpg722pay name=pay0 pt=9"                                                \
+  " rpicamsrc preview=false video-direction=90r "                              \
+  "! video/x-h264,width=800,height=600,framerate=15/1,"                        \
+  "profile=constrained-baseline "                                              \
+  "! rtph264pay name=pay1 pt=96 "
 
 // Audio and video muxed together
 // #define LAUNCHLINE \
@@ -136,7 +153,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.5) {
+    if (rms > 0.1) {
       g_print(
           "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
           rms_dB, peak_dB, decay_dB, rms);
@@ -165,12 +182,13 @@ static guint handleOptions(int *argc, char **argv[]) {
 }
 
 static guint initVolumePipeline(GstElement *pipeline) {
+  g_print("Initializing volume pipeline");
   GstElement *audiosrc, *audioconvert, *level, *fakesink, *volume;
   GstCaps *caps;
   GstBus *bus;
   guint watch_id;
 
-  caps = gst_caps_from_string("audio/x-raw,channels=2");
+  caps = gst_caps_from_string("audio/x-raw,channels=1");
 
   audiosrc = gst_element_factory_make("pulsesrc", NULL);
   audioconvert = gst_element_factory_make("audioconvert", NULL);
@@ -194,13 +212,11 @@ static guint initVolumePipeline(GstElement *pipeline) {
   if (!gst_element_link(level, fakesink))
     g_error("Failed to link level and fakesink");
 
-  g_object_set(G_OBJECT(audiosrc), "device",
-               "alsa_input.usb-0d8c_C-Media_USB_Headphone_Set-00.analog-mono",
-               NULL);
+  g_object_set(G_OBJECT(audiosrc), "device", DEVICE, NULL);
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
   g_object_set(G_OBJECT(level), "interval", (guint64)100000000, NULL);
-  g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)5, NULL);
+  g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)10, NULL);
   /* run synced and not as fast as we can */
   g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);
   g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
@@ -245,21 +261,26 @@ int main(int argc, char *argv[]) {
   GstRTSPServer *server = gst_rtsp_server_new();
   g_object_set(server, "service", port, NULL);
   GstRTSPMountPoints *mounts = gst_rtsp_server_get_mount_points(server);
-  GstRTSPMediaFactory *factory = gst_rtsp_media_factory_new();
-  gst_rtsp_media_factory_set_launch(factory, LAUNCHLINE);
-  gst_rtsp_media_factory_set_shared(factory, TRUE);
-  gst_rtsp_media_factory_set_clock(factory, clock);
 
-  gst_rtsp_mount_points_add_factory(mounts, "/test", factory);
+  g_print("video pipeline: %s\n", AV_LAUNCHLINE);
+  GstRTSPMediaFactory *avFactory = gst_rtsp_media_factory_new();
+  gst_rtsp_media_factory_set_launch(avFactory, AV_LAUNCHLINE);
+  gst_rtsp_media_factory_set_shared(avFactory, TRUE);
+  gst_rtsp_media_factory_set_clock(avFactory, clock);
 
-  /* we need to run a GLib main loop to get the messages */
+  g_print("audio pipeline: %s\n", AUDIO_LAUNCHLINE);
+  GstRTSPMediaFactory *audioFactory = gst_rtsp_media_factory_new();
+  gst_rtsp_media_factory_set_launch(audioFactory, AUDIO_LAUNCHLINE);
+  gst_rtsp_media_factory_set_shared(audioFactory, TRUE);
+  gst_rtsp_media_factory_set_clock(audioFactory, clock);
+
+  gst_rtsp_mount_points_add_factory(mounts, "/audiovideo", avFactory);
+  gst_rtsp_mount_points_add_factory(mounts, "/audio", audioFactory);
+
   g_object_unref(mounts);
   gst_rtsp_server_attach(server, NULL);
 
-  g_print("stream ready at rtsp://127.0.0.1:%s/test\n", port);
-
-  /* add a timeout for the session cleanup */
-  // g_timeout_add_seconds (2, (GSourceFunc) timeout, server);
+  g_print("stream ready at rtsp://127.0.0.1:%s\n", port);
 
   g_main_loop_run(loop);
 

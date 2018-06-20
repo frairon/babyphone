@@ -56,16 +56,16 @@ static void pad_added_handler(GstElement *src, GstPad *new_pad,
     gst_caps_unref(new_pad_caps);
 }
 
-#define USE_VIDEO
+// #define USE_VIDEO
 
 int main(int argc, char *argv[]) {
 
   gst_init(&argc, &argv);
 
   GstClock *net_clock =
-      gst_net_client_clock_new("net_clock", "192.168.178.53", 8554, 0);
+      gst_net_client_clock_new("net_clock", "192.168.178.52", 8554, 0);
   if (net_clock == NULL) {
-    g_print("Failed to create net clock client for %s:%d\n", "192.168.178.53",
+    g_print("Failed to create net clock client for %s:%d\n", "192.168.178.52",
             8554);
     return 1;
   }
@@ -80,20 +80,20 @@ int main(int argc, char *argv[]) {
 
   gst_pipeline_use_clock(GST_PIPELINE(pipeline), net_clock);
 
-  gst_pipeline_set_latency(GST_PIPELINE(pipeline), 200 * GST_MSECOND);
+  // gst_pipeline_set_latency(GST_PIPELINE(pipeline), 500 * GST_MSECOND);
 
   rtspSrc = gst_element_factory_make("rtspsrc", NULL);
   GstElement *audioJitterBuffer =
       gst_element_factory_make("rtpjitterbuffer", "ajitterbuffer");
   g_object_set(G_OBJECT(audioJitterBuffer), "drop-on-latency", (gboolean)1,
                NULL);
-  g_object_set(G_OBJECT(audioJitterBuffer), "latency", (guint)50, NULL);
+  // g_object_set(G_OBJECT(audioJitterBuffer), "latency", (guint)500, NULL);
   GstElement *videoJitterBuffer =
       gst_element_factory_make("rtpjitterbuffer", "vjitterbuffer");
   g_object_set(G_OBJECT(videoJitterBuffer), "drop-on-latency", (gboolean)1,
                NULL);
-  g_object_set(G_OBJECT(videoJitterBuffer), "latency", (guint)50, NULL);
-  GstElement *audiodepay = gst_element_factory_make("rtpvorbisdepay", NULL);
+  // g_object_set(G_OBJECT(videoJitterBuffer), "latency", (guint)500, NULL);
+  GstElement *audiodepay = gst_element_factory_make("rtpg722depay", NULL);
   GstElement *videodepay = gst_element_factory_make("rtph264depay", NULL);
   GstElement *audioQueue = gst_element_factory_make("queue", NULL);
   GstElement *videoQueue = gst_element_factory_make("queue", NULL);
@@ -102,11 +102,11 @@ int main(int argc, char *argv[]) {
   GstElement *vidSink = gst_element_factory_make("xvimagesink", NULL);
   g_object_set(G_OBJECT(vidSink), "sync", (gboolean)0, NULL);
 
-  GstElement *audioDecoder = gst_element_factory_make("vorbisdec", NULL);
+  GstElement *audioDecoder = gst_element_factory_make("avdec_g722", NULL);
   GstElement *audioSink = gst_element_factory_make("autoaudiosink", NULL);
   g_object_set(G_OBJECT(audioSink), "sync", (gboolean)1, NULL);
 
-  g_object_set(G_OBJECT(rtspSrc), "location", "rtsp://192.168.178.53:8554/test",
+  g_object_set(G_OBJECT(rtspSrc), "location", "rtsp://192.168.178.52:8554/audio",
                NULL);
   g_object_set(G_OBJECT(rtspSrc), "debug", TRUE, NULL);
   // g_object_set(G_OBJECT(rtspSrc), "latency", (guint64)101*GST_MSECOND, NULL);
@@ -121,8 +121,8 @@ int main(int argc, char *argv[]) {
     g_error("Failed to link video stream");
   }
 #endif
-  if (!gst_element_link_many(audioJitterBuffer, audiodepay, audioQueue,
-                             audioDecoder, audioSink, NULL)) {
+  if (!gst_element_link_many(audioJitterBuffer, audiodepay, audioDecoder, audioQueue,
+                              audioSink, NULL)) {
     g_error("Failed to link audio pipeline");
   }
 
