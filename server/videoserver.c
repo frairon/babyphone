@@ -49,7 +49,7 @@
   "! audio/G722, rate=16000, channels=1 "                                      \
   "! rtpg722pay name=pay0 pt=9"                                                \
   " rpicamsrc preview=false video-direction=90r "                              \
-  "! video/x-h264,width=800,height=600,framerate=15/1,"                        \
+  "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
   "! rtph264pay name=pay1 pt=96 "
 
@@ -105,7 +105,7 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.1) {
+    if (rms > 0.01) {
       g_print(
           "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
           rms_dB, peak_dB, decay_dB, rms);
@@ -167,7 +167,7 @@ static guint initVolumePipeline(GstElement *pipeline) {
   g_object_set(G_OBJECT(audiosrc), "device", DEVICE, NULL);
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
-  g_object_set(G_OBJECT(level), "interval", (guint64)100000000, NULL);
+  g_object_set(G_OBJECT(level), "interval", (guint64)150000000, NULL);
   g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)10, NULL);
   /* run synced and not as fast as we can */
   g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);

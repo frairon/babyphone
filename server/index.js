@@ -11,20 +11,44 @@ var vidServer = spawn('./videoserver', [], {
   }
 });
 
+var volumeBuffer = [0, 0, 0, 0, 0, 0];
+var bufLen = volumeBuffer.length;
+var idx = 0;
+
 wss.on('connection', function connection(ws) {
+  console.log("Connection requested");
   vidServer.stdout.on('data', function(data) {
-    try {
-      var d = JSON.parse(data);
-      ws.send(JSON.stringify({
-        "volume": d['normrms']
-      }));
-    } catch(err) {
-      console.log(data);
-    }
+    var dataStr = data.toString()
+    dataStr.split("\n").forEach(function(line){
+      consumeData(ws, line);
+    });
+
   });
 });
 
+function consumeData(ws, data){
+  if(!data.startsWith("{")) {
+    return;
+  }
+  try {
+    var d = JSON.parse(data);
+    var value = d['normrms'];
+    volumeBuffer[idx] = value;
+    if(idx == 0) {
+      ws.send(JSON.stringify({
+        "volume": volumeBuffer.reduce((a, b) => a + b, 0) / bufLen
+      }));
+    }
+    idx = (idx + 1) % bufLen;
+  } catch(err) {
+    console.log(err, data.toString());
+  }
+}
+
 vidServer.stdout.on('data', function(data) {
+  if(data.toString().startsWith("{")) {
+    return
+  }
   console.log("process output", data.toString());
 });
 
