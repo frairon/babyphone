@@ -1,2 +1,10 @@
 server/node_modules/
 .tags*
+client
+
+gradle
+.gradle
+.idea
+*.iml
+build/
+local.properties

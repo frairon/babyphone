@@ -1,5 +1,5 @@
 
-CAMHOST=192.168.178.52
+CAMHOST=pi@babyphone.fritz.box
 
 .PHONY: client
 
@@ -13,17 +13,17 @@ test2:
 	./test2
 
 remote:
-	ssh camhost 'mkdir -p /home/pi/babyphone'
-	scp server/*.* camhost:/home/pi/babyphone/
-	ssh camhost 'cd /home/pi/babyphone && gcc -D PI \
+	ssh ${CAMHOST} 'mkdir -p /home/pi/babyphone'
+	scp server/*.* ${CAMHOST}:/home/pi/babyphone/
+	ssh ${CAMHOST} 'cd /home/pi/babyphone && gcc -D PI \
 		`pkg-config --cflags glib-2.0 gstreamer-1.0 \
 		gstreamer-rtsp-server-1.0 gstreamer-net-1.0` \
 		videoserver.c -o videoserver \
 		`pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-net-1.0` -lm'
-	ssh camhost 'PATH=/usr/local/lib/nodejs/node-v10.1.0/bin:$$PATH pm2 restart index'
+	ssh ${CAMHOST} 'PATH=/usr/local/lib/nodejs/node-v10.1.0/bin:$$PATH pm2 restart index'
 
 remote-logs:
-	ssh camhost 'pm2 logs index --lines=100'
+	ssh ${CAMHOST} 'pm2 logs index --lines=100'
 
 
 # setting up the index with pm2:

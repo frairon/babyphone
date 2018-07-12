@@ -1,0 +1,4 @@
+/build
+/gst-build*
+.externalNativeBuild/
+src/assets/
