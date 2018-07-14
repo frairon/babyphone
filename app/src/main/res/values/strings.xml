@@ -3,4 +3,8 @@
     <string name="action_settings">Settings</string>
     <string name="button_play">Play</string>
     <string name="button_stop">Stop</string>
+    <string name="nfChannelName">Babyphone</string>
+    <string name="nfChannelDesc">Babyphone Events</string>
+    <string name="nfTitle">Babyphone</string>
+    <string name="nfTicker">Babyphone successfully connected</string>
 </resources>

@@ -1,10 +1,8 @@
 package babyphone.frosi.babyphone
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.os.Bundle
+import android.os.IBinder
 import android.support.v4.content.LocalBroadcastManager
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
@@ -15,10 +13,20 @@ import android.view.View
 import android.widget.*
 import kotlinx.android.synthetic.main.activity_babyphone.*
 
-class Babyphone : AppCompatActivity() {
+class Babyphone : AppCompatActivity(), ServiceConnection {
+    override fun onServiceDisconnected(name: ComponentName?) {
+        this.service = null
+    }
+
+    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+        this.service = (service as ConnectionService.ConnectionServiceBinder).service
+    }
+
     var player: Player? = null
 
     var currentMedia: String = "rtsp://babyphone.fritz.box:8554/audiovideo"
+
+    var service: ConnectionService? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +62,22 @@ class Babyphone : AppCompatActivity() {
             if (componentName == null) {
                 Log.e("websocket", "Could not start connection service. does not exist")
             }
+            this.bindService(Intent(this, ConnectionService::class.java), this, 0)
         }
+
+        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+        volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                activity.service?.volumeThreshold = volumeSeek.progress.toDouble() / 100.0
+            }
+
+
+        })
+
+
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
@@ -147,3 +170,4 @@ class Babyphone : AppCompatActivity() {
     }
 
 }
+
