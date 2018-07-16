@@ -15,18 +15,53 @@ var volumeBuffer = [0, 0, 0, 0, 0, 0];
 var bufLen = volumeBuffer.length;
 var idx = 0;
 
-wss.on('connection', function connection(ws) {
-  console.log("Connection requested");
-  vidServer.stdout.on('data', function(data) {
-    var dataStr = data.toString()
-    dataStr.split("\n").forEach(function(line){
-      consumeData(ws, line);
-    });
 
+function appShutdown(){
+  console.log("received shutdown. Shutting down the app. See ya.");
+  spawn('sudo', ['shutdown', '-h', '0'], {});
+}
+
+connections = []
+
+wss.on('connection', function(ws) {
+  console.log("Connection requested");
+  connections.push(ws);
+
+  // register handle to remove the connections when it's done
+  ws.on('close', function() {
+    var idx = connections.indexOf(ws);
+    if(idx > -1) {
+      connections.splice(idx, 1);
+    }
   });
+  ws.on('message', function(data){
+    console.log("received", data);
+    var parsed = JSON.parse(data);
+
+    if(parsed['action'] ==='shutdown'){
+      appShutdown();
+    }
+  });
+
 });
 
-function consumeData(ws, data){
+
+
+vidServer.stdout.on('data', function(data) {
+  var dataStr = data.toString()
+  dataStr.split("\n").forEach(function(line) {
+    consumeData(line);
+  });
+
+});
+
+function sendToConnections(data) {
+  connections.forEach(function(el) {
+    el.send(data);
+  });
+}
+
+function consumeData(data) {
   if(!data.startsWith("{")) {
     return;
   }
@@ -35,7 +70,7 @@ function consumeData(ws, data){
     var value = d['normrms'];
     volumeBuffer[idx] = value;
     if(idx == 0) {
-      ws.send(JSON.stringify({
+      sendToConnections(JSON.stringify({
         "volume": volumeBuffer.reduce((a, b) => a + b, 0) / bufLen
       }));
     }

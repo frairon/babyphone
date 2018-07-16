@@ -73,6 +73,17 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         return START_STICKY
     }
 
+
+    fun shutdown(){
+        val data = JSONObject();
+        data.put("action", "shutdown");
+        this.mWebSocketClient?.send(data.toString())
+    }
+
+    fun disconnect(){
+        this.stopSocket()
+    }
+
     private fun createNotification(modify: (( NotificationCompat.Builder) -> Unit)?):Notification{
         val showBabyphone = Intent(this, Babyphone::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -108,7 +119,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     override fun onBind(intent: Intent): IBinder? {
         Log.i(TAG, "onBind")
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
-        startSocket()
         return mBinder
     }
 
@@ -160,14 +170,17 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         this.volumeThreshold=threshold
     }
 
+    private var notified:Boolean=false
+
     fun handleVolume(volume:Double) {
 //        if (this.notification != null) {
 //                this.notification?.setProgress(100, (volume * 100.0).toInt(), false)
 //                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID,this.notification?.build())
 //            }
 //        }
-        if (volume > this.volumeThreshold){
+        if (!notified  && volume > this.volumeThreshold){
             doNotify({builder -> builder.setVibrate(longArrayOf(0,100))})
+            notified=true
         }
     }
 
@@ -185,6 +198,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private fun startSocket() {
         if (this.currentUri == null) {
             Log.e(TAG, "Error starting socket: no uri configured")
+            return
+        }
+        if(mWebSocketClient!=null){
+            Log.i(TAG, "already connected, not restarting socket.")
             return
         }
         mWebSocketClient = WebSocketClient(URI.create(this.currentUri), this, null)

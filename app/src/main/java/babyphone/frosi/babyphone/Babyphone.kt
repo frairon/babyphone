@@ -11,7 +11,10 @@ import android.view.MenuItem
 import android.view.SurfaceView
 import android.view.View
 import android.widget.*
+import android.widget.CompoundButton
 import kotlinx.android.synthetic.main.activity_babyphone.*
+import kotlinx.android.synthetic.main.activity_babyphone.view.*
+
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
     override fun onServiceDisconnected(name: ComponentName?) {
@@ -54,15 +57,25 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             this.player?.pause()
         }
         val activity = this
-        val connect = this.findViewById<View>(R.id.button_connect) as Button
-        connect.setOnClickListener {
-            val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-            Log.i("websocket", "connecting to " + hostInput.text.toString())
-            val componentName = this.startService(Intent(this, ConnectionService::class.java).putExtra("host", hostInput.text.toString()))
-            if (componentName == null) {
-                Log.e("websocket", "Could not start connection service. does not exist")
+        val connect = this.findViewById<View>(R.id.switch_connection) as Switch
+        connect.requestFocus()
+        connect.setOnCheckedChangeListener(CompoundButton.OnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked) {
+                val hostInput = this.findViewById<View>(R.id.text_host) as TextView
+                Log.i("websocket", "connecting to " + hostInput.text.toString())
+                val componentName = this.startService(Intent(this, ConnectionService::class.java).putExtra("host", hostInput.text.toString()))
+                if (componentName == null) {
+                    Log.e("websocket", "Could not start connection service. does not exist")
+                }
+                this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+            } else {
+                this.service?.disconnect()
             }
-            this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+        })
+
+        val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
+        btnShutdown.setOnClickListener {
+            this.service?.shutdown()
         }
 
         val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
@@ -76,23 +89,37 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
 
         })
-
+        val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
+        connecting.visibility = View.GONE
 
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
+                        val btnShutdown = activity.findViewById<View>(R.id.button_shutdown) as ImageButton
+                        val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
+                        val connect = activity.findViewById<View>(R.id.switch_connection) as Switch
+
                         when (intent.action) {
                             ConnectionService.ACTION_CONNECTING -> {
-                                val tv = activity.findViewById<View>(R.id.status_text) as TextView
-                                runOnUiThread { tv.text = "connecting..." }
+                                runOnUiThread {
+                                    connecting.visibility = View.VISIBLE
+                                    connect.text = getString(R.string.switchConnect_Connecting)
+                                }
                             }
                             ConnectionService.ACTION_CONNECTED -> {
-                                val tv = activity.findViewById<View>(R.id.status_text) as TextView
-                                runOnUiThread { tv.text = "connected" }
+                                runOnUiThread {
+                                    connecting.visibility = View.GONE
+                                    btnShutdown.isEnabled = false
+                                    connect.text = getString(R.string.switchConnect_Connected)
+                                }
                             }
                             ConnectionService.ACTION_DISCONNECTED -> {
-                                val tv = activity.findViewById<View>(R.id.status_text) as TextView
-                                runOnUiThread { tv.text = "disconnected" }
+                                runOnUiThread {
+                                    connect.isChecked = false
+                                    connecting.visibility = View.GONE
+                                    btnShutdown.isEnabled = false
+                                    connect.text = getString(R.string.switchConnect_Disconnected)
+                                }
                             }
                             ConnectionService.ACTION_VOLUME_RECEIVED -> {
                                 val volBar = activity.findViewById<View>(R.id.prog_vol_level) as ProgressBar
@@ -159,6 +186,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.mExitPrompt = true
                 return
             }
+            this.unbindService(this)
             this.stopService(Intent(this, ConnectionService::class.java))
             this.finish()
         }

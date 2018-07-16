@@ -37,7 +37,7 @@
             android:layout_marginLeft="8dp"
             android:layout_marginRight="8dp"
             android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="24dp"
             android:max="100"
             android:progress="50"
             android:thumb="@android:drawable/sym_action_call"
@@ -51,10 +51,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical|center_horizontal"
+            android:layout_marginBottom="8dp"
             android:layout_marginTop="8dp"
+            app:layout_constraintBottom_toTopOf="@+id/textView"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/vol_alarm_seeker" />
+            app:layout_constraintTop_toBottomOf="@+id/vol_alarm_seeker"
+            app:layout_constraintVertical_bias="1.0" />
 
         <ImageButton
             android:id="@+id/button_play"
@@ -64,16 +67,13 @@
             android:layout_marginLeft="8dp"
             android:layout_marginRight="8dp"
             android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
             android:contentDescription="@string/button_play"
             android:src="@android:drawable/ic_media_play"
             android:text="@string/button_play"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toBottomOf="@+id/surface_video"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/surface_video"
-            app:layout_constraintVertical_bias="0.0" />
+            app:layout_constraintHorizontal_bias="0.023"
+            app:layout_constraintStart_toStartOf="parent" />
 
         <ImageButton
             android:id="@+id/button_stop"
@@ -83,66 +83,109 @@
             android:layout_marginLeft="8dp"
             android:layout_marginRight="8dp"
             android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
             android:contentDescription="@string/button_stop"
             android:src="@android:drawable/ic_media_pause"
             android:text="@string/button_stop"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toBottomOf="@+id/surface_video"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toEndOf="@+id/button_play"
-            app:layout_constraintTop_toBottomOf="@+id/surface_video"
-            app:layout_constraintVertical_bias="0.0" />
-
-        <Button
-            android:id="@+id/button_connect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
-            android:layout_marginStart="8dp"
-            android:text="Connect"
-            app:layout_constraintBottom_toBottomOf="@+id/text_host"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.02"
-            app:layout_constraintStart_toEndOf="@+id/text_host"
-            app:layout_constraintTop_toTopOf="@+id/text_host" />
+            app:layout_constraintStart_toEndOf="@+id/button_play" />
 
         <ProgressBar
             android:id="@+id/prog_vol_level"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="44dp"
             android:layout_marginEnd="8dp"
             android:layout_marginLeft="8dp"
             android:layout_marginRight="8dp"
             android:layout_marginStart="8dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="55dp"
             android:max="100"
             android:progress="50"
             android:progressDrawable="@android:drawable/progress_horizontal"
             app:layout_constraintBottom_toTopOf="@+id/vol_alarm_seeker"
             app:layout_constraintEnd_toEndOf="@+id/vol_alarm_seeker"
+            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="@+id/vol_alarm_seeker"
-            app:layout_constraintTop_toBottomOf="@+id/status_text" />
+            app:layout_constraintTop_toBottomOf="@+id/text_host" />
 
 
         <MultiAutoCompleteTextView
             android:id="@+id/text_host"
-            android:layout_width="0dp"
+            android:layout_width="175dp"
             android:layout_height="45dp"
             android:layout_marginLeft="8dp"
             android:layout_marginStart="8dp"
             android:layout_marginTop="64dp"
             android:text="babyphone.fritz.box"
-            app:layout_constraintBottom_toTopOf="@+id/status_text"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <Switch
+            android:id="@+id/switch_connection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="16dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="8dp"
+            android:checked="false"
+            android:text="@string/switchConnect_Disconnected"
+            android:textOff="disconnect"
+            android:textOn="connect"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/text_host"
+            tools:checked="false" />
+
+        <ImageButton
+            android:id="@+id/button_shutdown"
+            android:layout_width="wrap_content"
+            android:layout_height="41dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            app:layout_constraintBottom_toBottomOf="@+id/switch_connection"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="1.0"
+            app:layout_constraintStart_toEndOf="@+id/switch_connection"
+            app:layout_constraintTop_toTopOf="@+id/switch_connection"
+            app:srcCompat="@android:drawable/ic_lock_power_off" />
+
+        <ProgressBar
+            android:id="@+id/spinner_connecting"
+            android:layout_width="wrap_content"
+            android:layout_height="0dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            app:layout_constraintBottom_toBottomOf="@+id/switch_connection"
+            app:layout_constraintEnd_toStartOf="@+id/button_shutdown"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toEndOf="@+id/switch_connection"
+            app:layout_constraintTop_toTopOf="@+id/switch_connection"
+            app:layout_constraintVertical_bias="0.724" />
+
         <TextView
-            android:id="@+id/status_text"
-            android:layout_width="0dp"
+            android:id="@+id/textView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            android:text="TextView"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/textView2"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             android:layout_marginEnd="8dp"
@@ -150,12 +193,12 @@
             android:layout_marginRight="8dp"
             android:layout_marginStart="8dp"
             android:layout_marginTop="8dp"
-            android:text="Status"
-            app:layout_constraintBottom_toTopOf="@+id/prog_vol_level"
+            android:text="Host"
+            app:layout_constraintBottom_toBottomOf="@+id/text_host"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/text_host" />
+            app:layout_constraintStart_toEndOf="@+id/text_host"
+            app:layout_constraintTop_toTopOf="@+id/text_host" />
 
     </android.support.constraint.ConstraintLayout>
 
