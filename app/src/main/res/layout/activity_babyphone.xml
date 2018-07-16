@@ -28,24 +28,6 @@
         tools:context=".BabyphoneContent"
         tools:showIn="@layout/activity_babyphone">
 
-        <SeekBar
-            android:id="@+id/vol_alarm_seeker"
-            style="@style/Widget.AppCompat.SeekBar.Discrete"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="24dp"
-            android:max="100"
-            android:progress="50"
-            android:thumb="@android:drawable/sym_action_call"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/prog_vol_level" />
-
         <babyphone.frosi.babyphone.GStreamerSurfaceView
             android:id="@+id/surface_video"
             android:layout_width="wrap_content"
@@ -56,8 +38,7 @@
             app:layout_constraintBottom_toTopOf="@+id/textView"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/vol_alarm_seeker"
-            app:layout_constraintVertical_bias="1.0" />
+            app:layout_constraintTop_toBottomOf="@+id/vol_alarm_seeker" />
 
         <ImageButton
             android:id="@+id/button_play"
@@ -91,26 +72,6 @@
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toEndOf="@+id/button_play" />
 
-        <ProgressBar
-            android:id="@+id/prog_vol_level"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="44dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="55dp"
-            android:max="100"
-            android:progress="50"
-            android:progressDrawable="@android:drawable/progress_horizontal"
-            app:layout_constraintBottom_toTopOf="@+id/vol_alarm_seeker"
-            app:layout_constraintEnd_toEndOf="@+id/vol_alarm_seeker"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toStartOf="@+id/vol_alarm_seeker"
-            app:layout_constraintTop_toBottomOf="@+id/text_host" />
-
 
         <MultiAutoCompleteTextView
             android:id="@+id/text_host"
@@ -137,6 +98,20 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_host"
             tools:checked="false" />
+
+        <com.jjoe64.graphview.GraphView
+            android:id="@+id/graph_volume"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            app:layout_constraintBottom_toTopOf="@+id/vol_alarm_seeker"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/spinner_connecting" />
 
         <ImageButton
             android:id="@+id/button_shutdown"
@@ -199,6 +174,23 @@
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toEndOf="@+id/text_host"
             app:layout_constraintTop_toTopOf="@+id/text_host" />
+
+        <SeekBar
+            android:id="@+id/vol_alarm_seeker"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            android:max="100"
+            android:progress="50"
+            android:thumb="@drawable/ic_volume_down_black_24dp"
+            app:layout_constraintBottom_toTopOf="@+id/surface_video"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/graph_volume" />
 
     </android.support.constraint.ConstraintLayout>
 

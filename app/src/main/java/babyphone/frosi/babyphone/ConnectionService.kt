@@ -16,9 +16,26 @@ import android.support.v4.content.LocalBroadcastManager
 import android.util.Log
 import com.codebutler.android_websockets.WebSocketClient
 import org.json.JSONObject
+import java.io.Serializable
 import java.net.URI
 import java.nio.charset.Charset
+import java.util.*
 
+
+class Volume(val time: Date, val volume: Double) : Serializable {
+}
+
+class VolumeHistory(private val maxSize: Int) {
+    private var volumes = ArrayList<Volume>()
+
+    public fun add(vol: Volume) {
+        volumes.add(vol)
+        volumes.sortBy { vol.time }
+        if (volumes.size > this.maxSize) {
+            this.volumes = this.volumes.drop(volumes.size - this.maxSize) as ArrayList
+        }
+    }
+}
 
 class ConnectionService : Service(), WebSocketClient.Listener {
 
@@ -74,17 +91,17 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
 
-    fun shutdown(){
+    fun shutdown() {
         val data = JSONObject();
         data.put("action", "shutdown");
         this.mWebSocketClient?.send(data.toString())
     }
 
-    fun disconnect(){
+    fun disconnect() {
         this.stopSocket()
     }
 
-    private fun createNotification(modify: (( NotificationCompat.Builder) -> Unit)?):Notification{
+    private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
         val showBabyphone = Intent(this, Babyphone::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val pshowBabyphone = PendingIntent.getService(this, 0,
@@ -106,7 +123,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
                 // TODO: make that configurable
 //                .setVibrate(longArrayOf(0,200,200,200,200,1000))
                 .setOngoing(true)
-        if(modify != null){
+        if (modify != null) {
             modify(builder)
         }
         return builder.build()
@@ -156,31 +173,33 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         if (parsed.has("volume")) {
             val volume = parsed.getDouble("volume")
             this.handleVolume(volume)
-            sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, volume) })
+            val vol = Volume(Date(), volume)
+            sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, vol) })
         } else {
             Log.w(TAG, "Unparsed message from websocket received. Ignoring")
         }
     }
-    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)?){
+
+    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)?) {
         val notification = this.createNotification(modify)
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID,notification)
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
     }
 
-    fun configureVolumeThreshold(threshold:Double){
-        this.volumeThreshold=threshold
+    fun configureVolumeThreshold(threshold: Double) {
+        this.volumeThreshold = threshold
     }
 
-    private var notified:Boolean=false
+    private var notified: Boolean = false
 
-    fun handleVolume(volume:Double) {
+    fun handleVolume(volume: Double) {
 //        if (this.notification != null) {
 //                this.notification?.setProgress(100, (volume * 100.0).toInt(), false)
 //                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID,this.notification?.build())
 //            }
 //        }
-        if (!notified  && volume > this.volumeThreshold){
-            doNotify({builder -> builder.setVibrate(longArrayOf(0,100))})
-            notified=true
+        if (!notified && volume > this.volumeThreshold) {
+            doNotify({ builder -> builder.setVibrate(longArrayOf(0, 100)) })
+            notified = true
         }
     }
 
@@ -200,7 +219,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             Log.e(TAG, "Error starting socket: no uri configured")
             return
         }
-        if(mWebSocketClient!=null){
+        if (mWebSocketClient != null) {
             Log.i(TAG, "already connected, not restarting socket.")
             return
         }
