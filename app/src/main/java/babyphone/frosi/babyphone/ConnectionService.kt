@@ -22,13 +22,14 @@ import java.nio.charset.Charset
 import java.util.*
 
 
-class Volume(val time: Date, val volume: Double) : Serializable {
+class Volume(val time: Date, val volume: Int) : Serializable {
 }
 
 class VolumeHistory(private val maxSize: Int) {
-    private var volumes = ArrayList<Volume>()
+    var volumes = ArrayList<Volume>()
+        private set
 
-    public fun add(vol: Volume) {
+    fun add(vol: Volume) {
         volumes.add(vol)
         volumes.sortBy { vol.time }
         if (volumes.size > this.maxSize) {
@@ -43,7 +44,9 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private var mWebSocketClient: WebSocketClient? = null
     private var currentUri: String? = null
 
-    var volumeThreshold: Double = 0.5
+    val volHistory = VolumeHistory(Babyphone.MAX_GRAPH_ELEMENTS)
+
+    var volumeThreshold: Int = 50
 
     private val mMessageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -69,22 +72,24 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         }
     }
 
-    private fun configureHost(host: String) {
+    fun connectToHost(host: String) {
         this.currentUri = "ws://$host:8080"
         Log.i(TAG, "configuring websocket-uri ${this.currentUri}")
+
+        startSocket()
+    }
+
+    fun disconnect() {
+        stopSocket()
+    }
+
+    fun isConnected(): Boolean {
+        return this.mWebSocketClient != null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onstartcommand")
-        if (intent == null) {
-            Log.i(TAG, "> null intent. ignoring")
-            throw RuntimeException("Intent was null")
-        }
 
-        this.configureHost(intent.getStringExtra("host"))
-        LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
-        startSocket()
-        sendAction(ACTION_CONNECTING, null)
         this.startForeground()
 
         return START_STICKY
@@ -95,10 +100,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val data = JSONObject();
         data.put("action", "shutdown");
         this.mWebSocketClient?.send(data.toString())
-    }
-
-    fun disconnect() {
-        this.stopSocket()
     }
 
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
@@ -118,10 +119,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
                         Bitmap.createScaledBitmap(icon, 128, 128, false))
                 .setContentIntent(pshowBabyphone)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
-                // TODO: make that configurable
-//                .setLights(Color.RED, 3000, 3000)
-                // TODO: make that configurable
-//                .setVibrate(longArrayOf(0,200,200,200,200,1000))
                 .setOngoing(true)
         if (modify != null) {
             modify(builder)
@@ -153,6 +150,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     override fun onCreate() {
         Log.i(TAG, "onCreate")
+        LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
     }
 
     override fun onConnect() {
@@ -172,8 +170,9 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val parsed = JSONObject(message)
         if (parsed.has("volume")) {
             val volume = parsed.getDouble("volume")
-            this.handleVolume(volume)
-            val vol = Volume(Date(), volume)
+            val vol = Volume(Date(), (volume * 100.0).toInt())
+            volHistory.add(vol)
+            this.handleVolume(vol)
             sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, vol) })
         } else {
             Log.w(TAG, "Unparsed message from websocket received. Ignoring")
@@ -185,19 +184,11 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
     }
 
-    fun configureVolumeThreshold(threshold: Double) {
-        this.volumeThreshold = threshold
-    }
-
     private var notified: Boolean = false
 
-    fun handleVolume(volume: Double) {
-//        if (this.notification != null) {
-//                this.notification?.setProgress(100, (volume * 100.0).toInt(), false)
-//                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID,this.notification?.build())
-//            }
-//        }
-        if (!notified && volume > this.volumeThreshold) {
+    fun handleVolume(volume: Volume) {
+
+        if (!notified && volume.volume > this.volumeThreshold) {
             doNotify({ builder -> builder.setVibrate(longArrayOf(0, 100)) })
             notified = true
         }
@@ -206,17 +197,21 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     override fun onDisconnect(code: Int, reason: String) {
         Log.i(TAG, "Websocket onDisconnect()")
         Log.i(TAG, "Code: $code - Reason: $reason")
+        // TODO: shoud we do a reconnect?
         sendAction(ACTION_DISCONNECTED, null)
+        stopSocket()
     }
 
     override fun onError(error: Exception) {
         Log.e(TAG, "Websocket connection: " + error.toString())
         sendAction(ACTION_DISCONNECTED, null)
+        // TODO: should we do a reconnect?
+        stopSocket()
     }
 
     private fun startSocket() {
         if (this.currentUri == null) {
-            Log.e(TAG, "Error starting socket: no uri configured")
+            Log.i(TAG, "No host configured. Will not attempt to connect")
             return
         }
         if (mWebSocketClient != null) {
@@ -225,6 +220,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         }
         mWebSocketClient = WebSocketClient(URI.create(this.currentUri), this, null)
         mWebSocketClient!!.connect()
+        sendAction(ACTION_CONNECTING, null)
     }
 
     private fun stopSocket() {
@@ -232,6 +228,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             mWebSocketClient!!.disconnect()
             mWebSocketClient = null
         }
+
+        this.currentUri = null
     }
 
     private fun sendMessageReceivedEvent(message: String) {

@@ -1,6 +1,5 @@
 package babyphone.frosi.babyphone
 
-import android.app.PendingIntent.getActivity
 import android.content.*
 import android.graphics.Color
 import android.os.Bundle
@@ -21,6 +20,7 @@ import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import kotlinx.android.synthetic.main.activity_babyphone.*
 import java.text.SimpleDateFormat
+import java.util.*
 
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
@@ -28,8 +28,28 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.service = null
     }
 
+    companion object{
+        val MAX_GRAPH_ELEMENTS=300
+    }
+
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
         this.service = (service as ConnectionService.ConnectionServiceBinder).service
+
+        if (this.service == null){
+            return
+        }
+
+        if (this.service!!.isConnected()) {
+            this.setConnectionStatus(ConnectionService.ACTION_CONNECTED, true)
+        } else {
+            this.setConnectionStatus(ConnectionService.ACTION_DISCONNECTED, true)
+        }
+
+        this.initVolumeHistory()
+
+        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+        volumeSeek.progress = this.service!!.volumeThreshold
+        this.setGraphThreshold(volumeSeek.progress)
     }
 
     var player: Player? = null
@@ -37,6 +57,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     var currentMedia: String = "rtsp://babyphone.fritz.box:8554/audiovideo"
 
     var service: ConnectionService? = null
+
+
+    override fun onSaveInstanceState(outState: Bundle?) {
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +78,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         initVolumeGraph()
 
+        val componentName = this.startService(Intent(this, ConnectionService::class.java))
+        if (componentName == null) {
+           throw RuntimeException("Could not start connection service. does not exist")
+        }
+
         val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
         val sh = sv.holder
         sh.addCallback(this.player)
@@ -68,16 +98,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
         val activity = this
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-        connect.requestFocus()
         connect.setOnCheckedChangeListener(CompoundButton.OnCheckedChangeListener { buttonView, isChecked ->
             if (isChecked) {
                 val hostInput = this.findViewById<View>(R.id.text_host) as TextView
                 Log.i("websocket", "connecting to " + hostInput.text.toString())
-                val componentName = this.startService(Intent(this, ConnectionService::class.java).putExtra("host", hostInput.text.toString()))
-                if (componentName == null) {
-                    Log.e("websocket", "Could not start connection service. does not exist")
-                }
-                this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+                this.service?.connectToHost(hostInput.text.toString())
             } else {
                 this.service?.disconnect()
             }
@@ -96,30 +121,32 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
 
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                activity.service?.volumeThreshold = volumeSeek.progress.toDouble() / 100.0
+                activity.service?.volumeThreshold = volumeSeek.progress
 
-                activity.setGraphThreshold(progress.toDouble())
+                activity.setGraphThreshold(progress)
 
                 activity.setVolumeThresholdIcon()
             }
         })
-        setGraphThreshold(volumeSeek.progress.toDouble())
+        setGraphThreshold(volumeSeek.progress)
         val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         connecting.visibility = View.GONE
-        connectToServiceBroadcast()
 
+        connectToServiceBroadcast()
         this.player?.initialize()
+        this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+
     }
 
-    fun setVolumeThresholdIcon(){
+    fun setVolumeThresholdIcon() {
 
-        val volumeSeek= this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
         val progress = volumeSeek.progress
-        if(progress==0||progress==100){
+        if (progress == 0 || progress == 100) {
             volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_off_black_24dp)
-        }else if(progress < 50){
+        } else if (progress < 50) {
             volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_down_black_24dp)
-        }else{
+        } else {
             volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_up_black_24dp)
         }
     }
@@ -128,8 +155,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var thresholdSeries = LineGraphSeries<DataPoint>()
 
 
-    fun setGraphThreshold(threshold: Double) {
-        this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold), DataPoint(Double.MAX_VALUE, threshold)))
+    fun setGraphThreshold(threshold: Int) {
+        this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold.toDouble()), DataPoint(Double.MAX_VALUE, threshold.toDouble())))
     }
 
     fun initVolumeGraph() {
@@ -138,10 +165,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         graph.addSeries(this.thresholdSeries)
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
-//        graph.gridLabelRenderer.numHorizontalLabels = 6
 
-        this.thresholdSeries.color=Color.RED
-        this.thresholdSeries.thickness=3
+        this.thresholdSeries.color = Color.RED
+        this.thresholdSeries.thickness = 3
         val vp = graph.viewport
         vp.isScrollable = true
         vp.isScalable = true
@@ -153,17 +179,30 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         vp.setMaxX(this.volumeSeries.highestValueX)
     }
 
-    fun setConnectionStatus(status: String) {
+    fun initVolumeHistory(){
+        if(this.service == null){
+            return
+        }
+        val dataPoints = this.service!!.volHistory.volumes.map({ it->DataPoint(it.time, it.volume.toDouble()) })
+        this.volumeSeries.resetData(dataPoints.toTypedArray())
+
+        val graph = this.findViewById(R.id.graph_volume) as GraphView?
+
+        graph?.viewport?.setMinX(volumeSeries.lowestValueX)
+        graph?.viewport?.setMaxX(volumeSeries.highestValueX)
+    }
+
+    fun setConnectionStatus(status: String, setButton:Boolean=false) {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-
         when (status) {
             ConnectionService.ACTION_CONNECTING -> {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Connecting)
+                    if(setButton) connect.isChecked=true
                 }
             }
             ConnectionService.ACTION_CONNECTED -> {
@@ -171,6 +210,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     connecting.visibility = View.GONE
                     btnShutdown.isEnabled = true
                     connect.text = getString(R.string.switchConnect_Connected)
+                    if(setButton) connect.isChecked=true
                 }
             }
             ConnectionService.ACTION_DISCONNECTED -> {
@@ -179,13 +219,14 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     connecting.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
+                    if(setButton) connect.isChecked=false
                 }
             }
             else -> throw IllegalArgumentException("Invalid status $status")
         }
     }
 
-    fun connectToServiceBroadcast() {
+    private fun connectToServiceBroadcast() {
         val activity = this
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 object : BroadcastReceiver() {
@@ -200,15 +241,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                                     Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
                                     return
                                 }
-                                val newPoint = DataPoint(vol.time, vol.volume * 100)
-                                runOnUiThread {
-                                    volumeSeries.appendData(newPoint, true, 100)
-                                    val graph = activity.findViewById(R.id.graph_volume) as GraphView
-                                    graph.viewport.setMinX(volumeSeries.lowestValueX)
-                                    graph.viewport.setMaxX(volumeSeries.highestValueX)
-                                }
-
-
+                                activity.addVolumeToGraph(vol)
                             }
                             else -> {
                                 Log.w("websocket", "unhandled action in intent:" + intent.action)
@@ -221,6 +254,17 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         )
     }
 
+
+
+    fun addVolumeToGraph(vol:Volume){
+        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
+        runOnUiThread {
+            volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
+            val graph = this.findViewById(R.id.graph_volume) as GraphView
+            graph.viewport.setMinX(volumeSeries.lowestValueX)
+            graph.viewport.setMaxX(volumeSeries.highestValueX)
+        }
+    }
 
     // Called from native code when the size of the media changes or is first detected.
     // Inform the video surface about the new size and recalculate the layout.
@@ -269,7 +313,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.mExitPrompt = true
                 return
             }
-            this.unbindService(this)
             this.stopService(Intent(this, ConnectionService::class.java))
             this.finish()
         }
@@ -277,6 +320,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     override fun onDestroy() {
         this.player?.destroy()
+        this.unbindService(this)
         super.onDestroy()
     }
 
