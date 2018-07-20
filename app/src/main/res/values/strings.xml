@@ -6,7 +6,9 @@
     <string name="nfChannelName">Babyphone</string>
     <string name="nfChannelDesc">Babyphone Events</string>
     <string name="nfTitle">Babyphone</string>
-    <string name="nfTicker">Babyphone successfully connected</string>
+    <string name="nfTextConnected">Babyphone active</string>
+    <string name="nfTextConnecting">Babyphone disconnected</string>
+    <string name="nfTextDisconnected">Babyphone disconnected</string>
     <string name="switchConnect_Disconnected">Disconnected</string>
     <string name="switchConnect_Connecting">Connecting</string>
     <string name="switchConnect_Connected">Connected</string>

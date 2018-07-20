@@ -14,43 +14,19 @@ import android.view.SurfaceView
 import android.view.View
 import android.widget.*
 import android.widget.CompoundButton
+import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
+import com.jjoe64.graphview.series.PointsGraphSeries
 import kotlinx.android.synthetic.main.activity_babyphone.*
+import org.threeten.bp.Instant
 import java.text.SimpleDateFormat
 import java.util.*
 
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
-    override fun onServiceDisconnected(name: ComponentName?) {
-        this.service = null
-    }
-
-    companion object{
-        val MAX_GRAPH_ELEMENTS=300
-    }
-
-    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-        this.service = (service as ConnectionService.ConnectionServiceBinder).service
-
-        if (this.service == null){
-            return
-        }
-
-        if (this.service!!.isConnected()) {
-            this.setConnectionStatus(ConnectionService.ACTION_CONNECTED, true)
-        } else {
-            this.setConnectionStatus(ConnectionService.ACTION_DISCONNECTED, true)
-        }
-
-        this.initVolumeHistory()
-
-        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-        volumeSeek.progress = this.service!!.volumeThreshold
-        this.setGraphThreshold(volumeSeek.progress)
-    }
 
     var player: Player? = null
 
@@ -59,14 +35,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     var service: ConnectionService? = null
 
 
-    override fun onSaveInstanceState(outState: Bundle?) {
-        super.onSaveInstanceState(outState)
-    }
+    private var lastExitPrompt: Instant? = null
+    private var volumeSeries = LineGraphSeries<DataPoint>()
+    private var thresholdSeries = LineGraphSeries<DataPoint>()
+    private var alarmSeries = PointsGraphSeries<DataPoint>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_babyphone)
         setSupportActionBar(toolbar)
+        AndroidThreeTen.init(this);
 
         try {
             this.player = Player(this)
@@ -80,7 +58,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         val componentName = this.startService(Intent(this, ConnectionService::class.java))
         if (componentName == null) {
-           throw RuntimeException("Could not start connection service. does not exist")
+            throw RuntimeException("Could not start connection service. does not exist")
         }
 
         val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
@@ -151,23 +129,26 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
-    private var volumeSeries = LineGraphSeries<DataPoint>()
-    private var thresholdSeries = LineGraphSeries<DataPoint>()
-
-
     fun setGraphThreshold(threshold: Int) {
         this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold.toDouble()), DataPoint(Double.MAX_VALUE, threshold.toDouble())))
     }
 
     fun initVolumeGraph() {
         val graph = findViewById(R.id.graph_volume) as GraphView
+
         graph.addSeries(this.volumeSeries)
         graph.addSeries(this.thresholdSeries)
+        graph.addSeries(this.alarmSeries)
+
+        this.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
+        this.alarmSeries.color = Color.MAGENTA
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
+        this.volumeSeries.thickness = 4
+
 
         this.thresholdSeries.color = Color.RED
-        this.thresholdSeries.thickness = 3
+        this.thresholdSeries.thickness = 2
         val vp = graph.viewport
         vp.isScrollable = true
         vp.isScalable = true
@@ -177,13 +158,42 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         vp.setMaxY(100.0)
         vp.setMinX(this.volumeSeries.lowestValueX)
         vp.setMaxX(this.volumeSeries.highestValueX)
+
+        graph.getGridLabelRenderer().setNumHorizontalLabels(2)
     }
 
-    fun initVolumeHistory(){
-        if(this.service == null){
+    override fun onServiceDisconnected(name: ComponentName?) {
+        this.service = null
+    }
+
+    companion object {
+        val MAX_GRAPH_ELEMENTS = 300
+    }
+
+    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+        this.service = (service as ConnectionService.ConnectionServiceBinder).service
+
+        if (this.service == null) {
             return
         }
-        val dataPoints = this.service!!.volHistory.volumes.map({ it->DataPoint(it.time, it.volume.toDouble()) })
+        this.setConnectionStatus(this.service!!.connectionState, true)
+
+        this.initVolumeHistory()
+
+        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+        volumeSeek.progress = this.service!!.volumeThreshold
+        this.setGraphThreshold(volumeSeek.progress)
+    }
+
+    fun initVolumeHistory() {
+        if (this.service == null) {
+            return
+        }
+
+        val alarmPoints = this.service!!.history.alarms.map { it->DataPoint(Date(it.toEpochMilli()), 0.0)}
+        this.alarmSeries.resetData(alarmPoints.toTypedArray())
+
+        val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
         this.volumeSeries.resetData(dataPoints.toTypedArray())
 
         val graph = this.findViewById(R.id.graph_volume) as GraphView?
@@ -192,37 +202,36 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         graph?.viewport?.setMaxX(volumeSeries.highestValueX)
     }
 
-    fun setConnectionStatus(status: String, setButton:Boolean=false) {
+    fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-        when (status) {
-            ConnectionService.ACTION_CONNECTING -> {
+        when (state) {
+            ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Connecting)
-                    if(setButton) connect.isChecked=true
+                    if (setButton) connect.isChecked = true
                 }
             }
-            ConnectionService.ACTION_CONNECTED -> {
+            ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
                     btnShutdown.isEnabled = true
                     connect.text = getString(R.string.switchConnect_Connected)
-                    if(setButton) connect.isChecked=true
+                    if (setButton) connect.isChecked = true
                 }
             }
-            ConnectionService.ACTION_DISCONNECTED -> {
+            ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
                     connect.isChecked = false
                     connecting.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
-                    if(setButton) connect.isChecked=false
+                    if (setButton) connect.isChecked = false
                 }
             }
-            else -> throw IllegalArgumentException("Invalid status $status")
         }
     }
 
@@ -232,8 +241,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
                         when (intent.action) {
-                            ConnectionService.ACTION_CONNECTING, ConnectionService.ACTION_CONNECTED, ConnectionService.ACTION_DISCONNECTED -> {
-                                setConnectionStatus(intent.action)
+                            ConnectionService.ConnectionState.findState(intent.action)?.action -> {
+                                setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
                             }
                             ConnectionService.ACTION_VOLUME_RECEIVED -> {
                                 val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?
@@ -243,11 +252,13 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                                 }
                                 activity.addVolumeToGraph(vol)
                             }
+                            ConnectionService.ACTION_ALARM_TRIGGERED -> {
+                                activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
+                            }
                             else -> {
                                 Log.w("websocket", "unhandled action in intent:" + intent.action)
                             }
                         }
-                        val message = intent.getStringExtra("message")
                     }
                 },
                 ConnectionService.createActionIntentFilter()
@@ -255,8 +266,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
 
-
-    fun addVolumeToGraph(vol:Volume){
+    fun addVolumeToGraph(vol: Volume) {
         val newPoint = DataPoint(vol.time, vol.volume.toDouble())
         runOnUiThread {
             volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
@@ -304,13 +314,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
-    private var mExitPrompt: Boolean = false
-
     override fun onBackPressed() {
         if (this.isTaskRoot) {
-            if (!mExitPrompt) {
+
+            if (lastExitPrompt == null || (Instant.now().toEpochMilli() - lastExitPrompt!!.toEpochMilli()) > 2000) {
                 Toast.makeText(this, "Tab again to exit Babyphone", Toast.LENGTH_SHORT).show()
-                this.mExitPrompt = true
+                this.lastExitPrompt = Instant.now()
                 return
             }
             this.stopService(Intent(this, ConnectionService::class.java))
