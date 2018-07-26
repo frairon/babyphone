@@ -30,8 +30,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     var player: Player? = null
 
-    var currentMedia: String = "rtsp://babyphone.fritz.box:8554/audiovideo"
-
     var service: ConnectionService? = null
 
 
@@ -39,6 +37,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+
+    enum class StreamMode(val suffix: String) {
+        Audio("audio"),
+        AudioVideo("audiovideo")
+    }
+
+    fun createUrl(streamMode: StreamMode): String {
+        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
+        return "rtsp://" + hostInput.text.toString() + "/" + streamMode.suffix
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,18 +73,27 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val sh = sv.holder
         sh.addCallback(this.player)
 
-        val play = this.findViewById<View>(R.id.button_play) as ImageButton
-        play.setOnClickListener {
-            this.player?.play(currentMedia)
+        this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
+
+        val playAudio = this.findViewById<View>(R.id.button_audio) as ImageButton
+        playAudio.setOnClickListener {
+            this.player?.play(createUrl(StreamMode.Audio))
+            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
+        }
+        val playVideo = this.findViewById<View>(R.id.button_video) as ImageButton
+        playVideo.setOnClickListener {
+            this.player?.play(createUrl(StreamMode.AudioVideo))
+            this.findViewById<View>(R.id.surface_video).visibility = View.VISIBLE
         }
 
         val pause = this.findViewById<View>(R.id.button_stop) as ImageButton
         pause.setOnClickListener {
             this.player?.pause()
+            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
         }
         val activity = this
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-        connect.setOnCheckedChangeListener(CompoundButton.OnCheckedChangeListener { buttonView, isChecked ->
+        connect.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 val hostInput = this.findViewById<View>(R.id.text_host) as TextView
                 Log.i("websocket", "connecting to " + hostInput.text.toString())
@@ -84,7 +101,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             } else {
                 this.service?.disconnect()
             }
-        })
+        }
 
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         btnShutdown.isEnabled = false
@@ -190,7 +207,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             return
         }
 
-        val alarmPoints = this.service!!.history.alarms.map { it->DataPoint(Date(it.toEpochMilli()), 0.0)}
+        val alarmPoints = this.service!!.history.alarms.map { it -> DataPoint(Date(it.toEpochMilli()), 0.0) }
         this.alarmSeries.resetData(alarmPoints.toTypedArray())
 
         val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }

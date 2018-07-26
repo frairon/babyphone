@@ -55,7 +55,20 @@ vidServer.stdout.on('data', function(data) {
 
 });
 
+var heartbeatInterval = 2000;
+var lastSent = new Date();
+
+function heartbeat(){
+  var now = new Date();
+  if(now-lastSent > heartbeatInterval){
+    sendToConnections(JSON.stringify({
+      'volume':0.0
+    }));
+  }
+}
+
 function sendToConnections(data) {
+  lastSent = new Date();
   connections.forEach(function(el) {
     el.send(data);
   });

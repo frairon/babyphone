@@ -43,6 +43,10 @@ class History(private val maxSize: Int) {
         }
     }
 
+    fun clear(){
+        this.alarms.clear()
+        this.volumes.clear()
+    }
     fun averageVolumeSince(past: Duration): Int {
         var sum = 0
         var count = 0
@@ -230,6 +234,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     override fun onConnect() {
         Log.i(TAG, "Websocket onConnect()")
         connectionState = ConnectionState.Connected
+        this.history.clear()
         doNotify()
     }
 
@@ -300,7 +305,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     override fun onError(error: Exception) {
         Log.e(TAG, "Websocket connection: " + error.toString())
         val oldConnectionState = connectionState
-
         connectionState = ConnectionState.Disconnected
         // TODO: should we do a reconnect?
         stopSocket()
