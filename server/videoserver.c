@@ -38,7 +38,7 @@
   "pulsesrc "                                                                  \
   "device=" DEVICE " ! audio/x-raw,rate=8000,channels=1 "                     \
   "! alawenc "                                                                 \
-  "! audio/G711, rate=8000, channels=1 "                                       \
+  "! audio/x-alaw,rate=8000,channels=1 "                                       \
   "! rtppcmapay name=pay0 pt=8"
 
 // audio and video in separate streams

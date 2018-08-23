@@ -4,6 +4,7 @@ import android.content.*
 import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
+import android.support.constraint.Group
 import android.support.v4.content.ContextCompat
 import android.support.v4.content.LocalBroadcastManager
 import android.support.v7.app.AppCompatActivity
@@ -45,7 +46,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     fun createUrl(streamMode: StreamMode): String {
         val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-        return "rtsp://" + hostInput.text.toString() + "/" + streamMode.suffix
+        return "rtsp://" + hostInput.text.toString() + ":8554/" + streamMode.suffix
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,23 +74,23 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val sh = sv.holder
         sh.addCallback(this.player)
 
-        this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
+//        this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
 
         val playAudio = this.findViewById<View>(R.id.button_audio) as ImageButton
         playAudio.setOnClickListener {
             this.player?.play(createUrl(StreamMode.Audio))
-            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
+//            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
         }
         val playVideo = this.findViewById<View>(R.id.button_video) as ImageButton
         playVideo.setOnClickListener {
             this.player?.play(createUrl(StreamMode.AudioVideo))
-            this.findViewById<View>(R.id.surface_video).visibility = View.VISIBLE
+//            this.findViewById<View>(R.id.surface_video).visibility = View.VISIBLE
         }
 
         val pause = this.findViewById<View>(R.id.button_stop) as ImageButton
         pause.setOnClickListener {
             this.player?.pause()
-            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
+//            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
         }
         val activity = this
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
@@ -221,8 +222,22 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
+        val playerGroup = this.findViewById<View>(R.id.player_group) as Group
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
+
+        when(state){
+            ConnectionService.ConnectionState.Connected -> {
+                runOnUiThread {
+                    playerGroup.visibility= View.VISIBLE
+                }
+            }
+            else ->{
+                runOnUiThread {
+                    playerGroup.visibility= View.GONE
+                }
+            }
+        }
         when (state) {
             ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {

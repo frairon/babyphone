@@ -107,3 +107,9 @@ setup-server:
 
 
 ## To find the name of the audio device
+
+
+# taken and adopted from
+# https://gist.github.com/ajfisher/a84889e64565d7a74888
+hotspot-setup:
+	apt-get install hostapd wpasupplicant dnsmasq
