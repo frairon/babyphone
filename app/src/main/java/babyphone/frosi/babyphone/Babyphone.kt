@@ -104,6 +104,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         }
 
+        val btnLights = this.findViewById<View>(R.id.btn_lights) as ImageButton
+        btnLights.setOnClickListener {
+            this.service?.toggleLights();
+        }
+
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         btnShutdown.isEnabled = false
         btnShutdown.setOnClickListener {

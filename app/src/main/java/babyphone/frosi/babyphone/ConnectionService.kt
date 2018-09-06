@@ -43,10 +43,11 @@ class History(private val maxSize: Int) {
         }
     }
 
-    fun clear(){
+    fun clear() {
         this.alarms.clear()
         this.volumes.clear()
     }
+
     fun averageVolumeSince(past: Duration): Int {
         var sum = 0
         var count = 0
@@ -96,6 +97,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private var currentUri: String? = null
     var volumeThreshold: Int = 50
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
+
+    var lights: Boolean = false
 
     var connectionState: ConnectionState = ConnectionState.Disconnected
         private set(value) {
@@ -352,6 +355,18 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             modify(intent)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    fun toggleLights() {
+        val data = JSONObject();
+        if (lights) {
+            data.put("action", "lightsoff");
+            lights = false
+        } else {
+            data.put("action", "lightson");
+            lights = true
+        }
+        this.mWebSocketClient?.send(data.toString())
     }
 
     inner class ConnectionServiceBinder : Binder() {

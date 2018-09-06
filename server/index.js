@@ -16,7 +16,7 @@ var bufLen = volumeBuffer.length;
 var idx = 0;
 
 
-function appShutdown(){
+function appShutdown() {
   console.log("received shutdown. Shutting down the app. See ya.");
   spawn('sudo', ['shutdown', '-h', '0'], {});
 }
@@ -34,12 +34,20 @@ wss.on('connection', function(ws) {
       connections.splice(idx, 1);
     }
   });
-  ws.on('message', function(data){
+  ws.on('message', function(data) {
     console.log("received", data);
     var parsed = JSON.parse(data);
 
-    if(parsed['action'] ==='shutdown'){
-      appShutdown();
+    switch(parsed['action']) {
+      case 'shutdown':
+        appShutdown();
+        break;
+      case 'lightson':
+        spawn('bash', ['-c', 'echo 1 > /sys/class/gpio/gpio24/value'], {});
+        break;
+      case 'lightsoff':
+        spawn('bash', ['-c', 'echo 0 > /sys/class/gpio/gpio24/value'], {});
+        break;
     }
   });
 
@@ -58,11 +66,11 @@ vidServer.stdout.on('data', function(data) {
 var heartbeatInterval = 2000;
 var lastSent = new Date();
 
-function heartbeat(){
+function heartbeat() {
   var now = new Date();
-  if(now-lastSent > heartbeatInterval){
+  if(now - lastSent > heartbeatInterval) {
     sendToConnections(JSON.stringify({
-      'volume':0.0
+      'volume': 0.0
     }));
   }
 }
@@ -114,6 +122,14 @@ function shutdown() {
   vidServer.kill('SIGTERM');
   process.exit(0);
 }
+
+setTimeout(function() {
+  spawn('bash', ['-c', 'echo 24 > /sys/class/gpio/export'], {});
+}, 1000);
+
+setTimeout(function() {
+  spawn('bash', ['-c', 'echo out > /sys/class/gpio/gpio24/direction'], {});
+}, 2000);
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
