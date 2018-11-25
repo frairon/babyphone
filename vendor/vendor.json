@@ -7,6 +7,30 @@
 			"path": "github.com/gorilla/websocket",
 			"revision": "483fb8d7c32fcb4b5636cd293a92e3935932e2f4",
 			"revisionTime": "2018-10-30T14:45:53Z"
+		},
+		{
+			"checksumSHA1": "JNXt1otbO/E3LkLa+xOeWF89n6g=",
+			"path": "github.com/gotk3/gotk3/glib",
+			"revision": "0762cd6335b851f6f0d0dec2633441bc0b2a9059",
+			"revisionTime": "2018-10-28T19:05:06Z"
+		},
+		{
+			"checksumSHA1": "ByRdQMv2yl16W6Tp9gUW1nNmpuI=",
+			"path": "github.com/hashicorp/errwrap",
+			"revision": "8a6fb523712970c966eefc6b39ed2c5e74880354",
+			"revisionTime": "2018-08-24T00:39:10Z"
+		},
+		{
+			"checksumSHA1": "cFcwn0Zxefithm9Q9DioRNcGbqg=",
+			"path": "github.com/hashicorp/go-multierror",
+			"revision": "886a7fbe3eb1c874d46f623bfa70af45f425b3d1",
+			"revisionTime": "2018-08-24T00:40:42Z"
+		},
+		{
+			"checksumSHA1": "XyBMgZnVZMG4S+HDDG8cAxteKMs=",
+			"path": "github.com/spreadspace/go-gstreamer",
+			"revision": "679bfc729cef3faf76170e6bf892e2ac628fadde",
+			"revisionTime": "2016-12-29T21:09:07Z"
 		}
 	],
 	"rootPath": "github.com/frairon/babyphone"

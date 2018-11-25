@@ -107,3 +107,8 @@ setup-server:
 
 
 ## To find the name of the audio device
+
+
+
+goserver:
+	go build github.com/frairon/babyphone/cmd/babyphone
