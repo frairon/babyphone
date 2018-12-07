@@ -15,6 +15,7 @@ import (
 
 var (
 	addr            = flag.String("addr", "localhost:8080", "http service address")
+	device          = flag.String("device", "", "device to use for audio input")
 	shutdownTimeout = 10 * time.Second
 )
 
@@ -37,7 +38,7 @@ func main() {
 		}
 	}()
 
-	err := server.VolumeStart()
+	err := server.VolumeStart(*device)
 	if err != nil {
 		log.Fatalf("Error starting volume: %v", err)
 	}

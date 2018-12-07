@@ -47,7 +47,7 @@ mictest:
 
 # test to transmit audio:
 # server:
-# GST_DEBUG=WARN gst-launch-1.0 pulsesrc ! audio/x-raw,rate=44100 ! audioconvert ! queue min-threshold-time=1000000000 ! avenc_aac ! rtpmp4apay ! udpsink host=192.168.178.56 port=5001
+# GST_DEBUG=WARN gst-launch-1.0 pulsesrc ! audio/x-raw,rate=44100 ! audioconvert ! queue min-threshold-time=1000000000 ! avenc_aac ! rtpmp4apay ! udpsink host=192.168.178.60 port=5001
 # client:
 # GST_DEBUG=WARN gst-launch-1.0 udpsrc port=5001 caps="application/x-rtp,media=(string)audio,clock-rate=44100,config=40002410adca00" ! rtpmp4adepay !  avdec_aac ! audioconvert ! queue ! alsasink
 
@@ -111,4 +111,41 @@ setup-server:
 
 
 goserver:
-	go build github.com/frairon/babyphone/cmd/babyphone
+	go build -o build/babyphone github.com/frairon/babyphone/cmd/babyphone
+
+docker:
+	docker build -t rpi-crosscompiler .
+
+RPIDIR := $(HOME)/projects/raspberrypi
+RPITOOL_BIN := $(RPIDIR)/tools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin
+RPITOOL_SYSROOT := $(RPIDIR)/tools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/arm-linux-gnueabihf/sysroot
+get-libs:
+	mkdir -p $(HOME)/projects/raspberrypi/babyphone/usr
+	rsync -a --info=progress2 --exclude="lib/cups/**" pi@babyphone.fritz.box:/usr $(HOME)/projects/raspberrypi/babyphone
+	rsync -a --info=progress2 pi@babyphone.fritz.box:/lib $(HOME)/projects/raspberrypi/babyphone/lib
+
+install-go:
+		GOOS=linux \
+		GOARCH=arm \
+		GOARM=6 \
+		go build -x -v -o build/rpi/babyphone github.com/frairon/babyphone/cmd/babyphone
+
+
+docker-go:
+	docker run -it \
+		-v $(HOME)/projects/raspberrypi/babyphone/usr/lib/arm-linux-gnueabihf/:/usr/lib/arm-linux-gnueabihf \
+		-v $(HOME)/projects/raspberrypi/babyphone/usr/include/arm-linux-gnueabihf/:/usr/include/arm-linux-gnueabihf \
+		-v $(GOPATH)/src:/home/rpi/tools/src \
+		-v $(HOME)/projects/raspberrypi/babyphone/lib/arm-linux-gnueabihf/:/lib/arm-linux-gnueabihf/ \
+		--rm rpi-crosscompiler \
+		bash -c 'cd /home/rpi/tools/src/github.com/frairon/babyphone/ && make build-in-docker'
+
+build-in-docker:
+	CC=/home/rpi/tools/tools-master/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc \
+		CGO_ENABLED=1 \
+		GOOS=linux \
+		GOARCH=arm \
+		CGO_CFLAGS="-I/usr/include/arm-linux-gnueabihf" \
+		CGO_LDFLAGS="-L/usr/lib/arm-linux-gnueabihf -L/lib/arm-linux-gnueabihf" \
+		GOARM=7 \
+		go build -v -o build/rpi/babyphone github.com/frairon/babyphone/cmd/babyphone || bash

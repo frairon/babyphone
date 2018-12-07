@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	gst "github.com/frairon/go-gstreamer"
@@ -10,14 +11,14 @@ import (
 )
 
 const (
-	volumeMsgInterval = 1 * time.Second
+	volumeMsgInterval = 500 * time.Millisecond
 )
 
 func init() {
 	gst.Init(nil)
 }
 
-func VolumeStart() error {
+func VolumeStart(device string) error {
 	var (
 		multErrs *multierror.Error
 	)
@@ -48,18 +49,21 @@ func VolumeStart() error {
 	volume := createElement("volume")
 	fakesink := createElement("fakesink")
 
-	if err := multErrs.ErrorOrNil(); err != nil {
+	if err = multErrs.ErrorOrNil(); err != nil {
 		return err
 	}
 
-	if err := p.Bin.AddMany(pulsesrc, audioconvert, level, volume, fakesink); err != nil {
+	if err = p.Bin.AddMany(pulsesrc, audioconvert, level, volume, fakesink); err != nil {
 		return err
 	}
 
-	if err := pulsesrc.LinkMany(audioconvert, level, volume, fakesink); err != nil {
+	if err = pulsesrc.LinkMany(audioconvert, level, volume, fakesink); err != nil {
 		return err
 	}
-	setProp(pulsesrc, "device", "alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-mono")
+
+	if device != "" {
+		setProp(pulsesrc, "device", device)
+	}
 	setProp(pulsesrc, "volume", 10.0)
 	setProp(level, "post-messages", true)
 	setProp(level, "interval", int64(volumeMsgInterval))
@@ -71,9 +75,54 @@ func VolumeStart() error {
 		return fmt.Errorf("Error getting bus from pipeline: %v", err)
 	}
 	bus.AddMessageCallback(func(msg *gst.Message) {
-		log.Printf("Message. %+v", msg.GetTypeName())
+		switch msg.GetType() {
+		case gst.MESSAGE_ERROR:
+			err, dbg := msg.ParseError()
+			log.Printf("Error is. %v, msg: %s", err, dbg)
+		case gst.MESSAGE_ELEMENT:
+			strct := msg.GetStructure()
+			parseVolume(strct)
+		case gst.MESSAGE_WARNING:
+			err, dbg := msg.ParseWarning()
+			log.Printf("volume gave a warning: %v, msg: %s", err, dbg)
+		default:
+			log.Printf("Message. %+v", msg.GetTypeName())
+		}
 	})
 	log.Printf("Starting pipeline")
 	p.SetState(gst.STATE_PLAYING)
 	return nil
+}
+
+func parseVolume(strct *gst.Structure) {
+	firstFloat := func(name string) (float64, error) {
+		multi, err := strct.ArrayValue(name)
+		if err != nil || len(multi) < 1 {
+			return 0.0, fmt.Errorf("error getting array: %v", err)
+		}
+		value, is := multi[0].(float64)
+		if !is {
+			return 0.0, fmt.Errorf("value %s in %v is not float64 but %T", name, strct, multi[0])
+		}
+		return value, nil
+	}
+
+	rmsDb, err := firstFloat("rms")
+	if err != nil {
+		return
+	}
+	peakDb, err := firstFloat("peak")
+	if err != nil {
+		return
+	}
+	decayDb, err := firstFloat("decay")
+	if err != nil {
+		return
+	}
+	_ = peakDb
+	_ = decayDb
+	rms := math.Pow(10.0, rmsDb/10.0)
+	if rms > 0.01 {
+		log.Printf("volume: %.3f", rms)
+	}
 }
