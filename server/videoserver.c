@@ -36,23 +36,22 @@
 
 #define AUDIO_LAUNCHLINE                                                       \
   "pulsesrc "                                                                  \
-  "device=" DEVICE " ! audio/x-raw,rate=16000,channels=1 "                      \
-  "! avenc_g722 "                                                              \
-  "! audio/G722, rate=16000, channels=1 "                                      \
-  "! rtpg722pay name=pay0 pt=9"
+  "device=" DEVICE " ! audio/x-raw,rate=8000,channels=1 "                     \
+  "! alawenc "                                                                 \
+  "! audio/x-alaw,rate=8000,channels=1 "                                       \
+  "! rtppcmapay name=pay0 pt=8"
 
 // audio and video in separate streams
 #define AV_LAUNCHLINE                                                          \
   "pulsesrc "                                                                  \
-  "device=" DEVICE " ! audio/x-raw,rate=16000,channels=1 "                      \
-  "! avenc_g722 "                                                              \
-  "! audio/G722, rate=16000, channels=1 "                                      \
-  "! rtpg722pay name=pay0 pt=9"                                                \
+  "device=" DEVICE " ! audio/x-raw,rate=8000,channels=1 "                     \
+  "! alawenc "                                                                 \
+  "! audio/x-alaw,rate=8000,channels=1 "                                       \
+  "! rtppcmapay name=pay0 pt=8"                                                \
   " rpicamsrc preview=false video-direction=90r "                              \
   "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
   "! rtph264pay name=pay1 pt=96 "
-
 
 #else
 
@@ -105,11 +104,9 @@ static gboolean message_handler(GstBus *bus, GstMessage *message,
 
     /* converting from dB to normal gives us a value between 0.0 and 1.0 */
     rms = pow(10, rms_dB / 20);
-    if (rms > 0.01) {
-      g_print(
-          "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
-          rms_dB, peak_dB, decay_dB, rms);
-    }
+    g_print(
+        "{\"rms\":%.3f, \"peak\": %.3f, \"decay\": %.3f, \"normrms\":%.3f}\n",
+        rms_dB, peak_dB, decay_dB, rms);
   }
   /* we handled the message we want, and ignored the ones we didn't want.
    * so the core can unref the message for us */
@@ -135,30 +132,28 @@ static guint handleOptions(int *argc, char **argv[]) {
 
 static guint initVolumePipeline(GstElement *pipeline) {
   g_print("Initializing volume pipeline");
-  GstElement *audiosrc, *audioconvert, *level, *fakesink, *volume;
+  GstElement *audiosrc, *audioconvert, *level, *fakesink, *volume, *passfilter;
   GstCaps *caps;
   GstBus *bus;
   guint watch_id;
 
-  caps = gst_caps_from_string("audio/x-raw,channels=1");
+  caps = gst_caps_from_string("audio/x-raw,channels=1,rate=8000");
 
   audiosrc = gst_element_factory_make("pulsesrc", NULL);
   audioconvert = gst_element_factory_make("audioconvert", NULL);
+  passfilter = gst_element_factory_make("audiochebband", NULL);
   level = gst_element_factory_make("level", NULL);
   volume = gst_element_factory_make("volume", NULL);
   fakesink = gst_element_factory_make("fakesink", NULL);
 
-  if (!pipeline || !audiosrc || !audioconvert || !volume || !level ||
+  if (!pipeline || !audiosrc || !passfilter || !audioconvert || !volume || !level ||
       !fakesink) {
     g_error("failed to create elements");
   }
 
-  gst_bin_add_many(GST_BIN(pipeline), audiosrc, audioconvert, volume, level,
+  gst_bin_add_many(GST_BIN(pipeline), audiosrc, audioconvert, passfilter, volume, level,
                    fakesink, NULL);
-  if (!gst_element_link(audiosrc, audioconvert))
-    g_error("Failed to link audiotestsrc and audioconvert");
-  if (!gst_element_link(audioconvert, volume))
-    g_error("Failed to link audioconvert and level");
+  gst_element_link_many(audiosrc, audioconvert, passfilter, volume);
   if (!gst_element_link_filtered(volume, level, caps))
     g_error("Failed to link audioconvert and level");
   if (!gst_element_link(level, fakesink))
@@ -172,6 +167,10 @@ static guint initVolumePipeline(GstElement *pipeline) {
   /* run synced and not as fast as we can */
   g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);
   g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
+
+  g_object_set(G_OBJECT(passfilter), "lower-frequency", (gfloat)100, NULL);
+  g_object_set(G_OBJECT(passfilter), "upper-frequency", (gfloat)12000, NULL);
+  g_object_set(G_OBJECT(passfilter), "poles", (gint)4, NULL);
 
   bus = gst_element_get_bus(pipeline);
   watch_id = gst_bus_add_watch(bus, message_handler, NULL);
