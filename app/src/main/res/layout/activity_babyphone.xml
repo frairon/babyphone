@@ -22,7 +22,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:visibility="visible"
-                app:constraint_referenced_ids="surface_video,button_audio,button_video,button_stop" />
+                app:constraint_referenced_ids="surface_video,button_audio,button_video,button_stop,btn_lights" />
 
             <babyphone.frosi.babyphone.GStreamerSurfaceView
                 android:id="@+id/surface_video"
@@ -215,6 +215,21 @@
                 app:layout_constraintStart_toStartOf="@+id/surface_video"
                 app:layout_constraintTop_toTopOf="@+id/surface_video"
                 app:layout_constraintVertical_bias="1.0" />
+
+            <ImageButton
+                android:id="@+id/btn_lights"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginStart="8dp"
+                app:layout_constraintBottom_toBottomOf="@+id/surface_video"
+                app:layout_constraintEnd_toEndOf="@+id/surface_video"
+                app:layout_constraintHorizontal_bias="1.0"
+                app:layout_constraintStart_toEndOf="@+id/button_stop"
+                android:src="@drawable/ic_lightbulb_outline_black_24dp" />
 
         </android.support.constraint.ConstraintLayout>
     </android.support.v4.widget.NestedScrollView>

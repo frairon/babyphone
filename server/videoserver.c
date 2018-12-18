@@ -48,7 +48,7 @@
   "! alawenc "                                                                 \
   "! audio/x-alaw,rate=8000,channels=1 "                                       \
   "! rtppcmapay name=pay0 pt=8"                                                \
-  " rpicamsrc preview=false video-direction=90r "                              \
+  " rpicamsrc preview=false video-direction=90r brightness=80 iso=800 contrast=80 "       \
   "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
   "! rtph264pay name=pay1 pt=96 "
