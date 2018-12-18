@@ -36,22 +36,42 @@
 
 #define AUDIO_LAUNCHLINE                                                       \
   "pulsesrc "                                                                  \
-  "device=" DEVICE " ! audio/x-raw,rate=8000,channels=1 "                     \
-  "! alawenc "                                                                 \
-  "! audio/x-alaw,rate=8000,channels=1 "                                       \
-  "! rtppcmapay name=pay0 pt=8"
+  "device=" DEVICE " "                                                         \
+  "! "                                                                         \
+  "audio/"                                                                     \
+  "x-raw,rate=48000,format=(string)S16LE,layout=(string)interleaved,channels=" \
+  "1 "                                                                         \
+  "! audiorate"                                                                \
+  "! audioparse rate=48000 depth=16 endianness=little channels=1 "             \
+  "! audioresample "                                                           \
+  "! "                                                                         \
+  "audio/"                                                                     \
+  "x-raw,channels=(int)1,rate=(int)16000,layout=(string)interleaved,format=("  \
+  "string)S16LE "                                                              \
+  "! audioconvert noise-shaping=GST_AUDIO_NOISE_SHAPING_SIMPLE "               \
+  "! rtpL16pay name=pay0 pt=96 "
 
 // audio and video in separate streams
 #define AV_LAUNCHLINE                                                          \
   "pulsesrc "                                                                  \
-  "device=" DEVICE " ! audio/x-raw,rate=8000,channels=1 "                     \
-  "! alawenc "                                                                 \
-  "! audio/x-alaw,rate=8000,channels=1 "                                       \
-  "! rtppcmapay name=pay0 pt=8"                                                \
-  " rpicamsrc preview=false video-direction=90r brightness=80 iso=800 contrast=80 "       \
+  "device=" DEVICE " "                                                         \
+  "! "                                                                         \
+  "audio/"                                                                     \
+  "x-raw,rate=48000,format=(string)S16LE,layout=(string)interleaved,channels=" \
+  "1 "                                                                         \
+  "! audiorate"                                                                \
+  "! audioparse rate=48000 depth=16 endianness=little channels=1 "             \
+  "! audioresample "                                                           \
+  "! "                                                                         \
+  "audio/"                                                                     \
+  "x-raw,channels=(int)1,rate=(int)16000,layout=(string)interleaved,format=("  \
+  "string)S16LE "                                                              \
+  "! audioconvert noise-shaping=GST_AUDIO_NOISE_SHAPING_SIMPLE "               \
+  "! rtpL16pay name=pay0 pt=96 "                                               \
+  " rpicamsrc preview=false video-direction=90r "                              \
   "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
-  "! rtph264pay name=pay1 pt=96 "
+  "! rtph264pay name=pay1 pt=97 "
 
 #else
 
@@ -146,13 +166,13 @@ static guint initVolumePipeline(GstElement *pipeline) {
   volume = gst_element_factory_make("volume", NULL);
   fakesink = gst_element_factory_make("fakesink", NULL);
 
-  if (!pipeline || !audiosrc || !passfilter || !audioconvert || !volume || !level ||
-      !fakesink) {
+  if (!pipeline || !audiosrc || !passfilter || !audioconvert || !volume ||
+      !level || !fakesink) {
     g_error("failed to create elements");
   }
 
-  gst_bin_add_many(GST_BIN(pipeline), audiosrc, audioconvert, passfilter, volume, level,
-                   fakesink, NULL);
+  gst_bin_add_many(GST_BIN(pipeline), audiosrc, audioconvert, passfilter,
+                   volume, level, fakesink, NULL);
   gst_element_link_many(audiosrc, audioconvert, passfilter, volume);
   if (!gst_element_link_filtered(volume, level, caps))
     g_error("Failed to link audioconvert and level");
