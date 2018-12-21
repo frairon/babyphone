@@ -107,9 +107,20 @@ setup-server:
 
 
 ## To find the name of the audio device
-
+pacmd list-sources
 
 # taken and adopted from
 # https://gist.github.com/ajfisher/a84889e64565d7a74888
 hotspot-setup:
 	apt-get install hostapd wpasupplicant dnsmasq
+
+
+# 2018-12-09
+# client just dies and does not play anything.
+GST_DEBUG=INFO gst-launch-1.0 pulsesrc device=alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-mono provide-clock=true do-timestamp=true latency-time=10000 ! avenc_g722 ! rtpg722pay ! udpsink host=192.168.178.60 port=5001
+GST_DEBUG=INFO gst-launch-1.0 udpsrc caps="application/x-rtp,clock-rate=(int)8000" port=5001 ! rtpg722depay ! audio/G722, rate=8000, channels=1 ! avdec_g722 ! alsasink
+
+
+decodeserver:
+	rsync -av server/decodebin.c $(CAMHOST):/tmp/decodebin.c
+	ssh $(CAMHOST) bash -c 'cd /tmp/ && gcc `pkg-config --cflags glib-2.0 gstreamer-1.0 gstreamer-net-1.0` -o decodeserver /tmp/decodebin.c `pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-net-1.0` -lm'
