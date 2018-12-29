@@ -107,7 +107,8 @@ setup-server:
 
 
 ## To find the name of the audio device
-pacmd list-sources
+list-sources:
+	pacmd list-sources
 
 # taken and adopted from
 # https://gist.github.com/ajfisher/a84889e64565d7a74888

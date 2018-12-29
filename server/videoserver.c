@@ -53,25 +53,12 @@
 
 // audio and video in separate streams
 #define AV_LAUNCHLINE                                                          \
-  "pulsesrc "                                                                  \
-  "device=" DEVICE " "                                                         \
-  "! "                                                                         \
-  "audio/"                                                                     \
-  "x-raw,rate=48000,format=(string)S16LE,layout=(string)interleaved,channels=" \
-  "1 "                                                                         \
-  "! audiorate"                                                                \
-  "! audioparse rate=48000 depth=16 endianness=little channels=1 "             \
-  "! audioresample "                                                           \
-  "! "                                                                         \
-  "audio/"                                                                     \
-  "x-raw,channels=(int)1,rate=(int)16000,layout=(string)interleaved,format=("  \
-  "string)S16LE "                                                              \
-  "! audioconvert noise-shaping=GST_AUDIO_NOISE_SHAPING_SIMPLE "               \
-  "! rtpL16pay name=pay0 pt=96 "                                               \
-  " rpicamsrc preview=false video-direction=90r "                              \
+  "rpicamsrc preview=false video-direction=90r brightness=90 iso=800 "         \
+  "contrast=90 "                                                               \
   "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
-  "! rtph264pay name=pay1 pt=97 "
+  "! rtph264pay name=pay0 pt=96 "
+
 
 #else
 
