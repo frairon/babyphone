@@ -88,7 +88,13 @@ function consumeData(data) {
   }
   try {
     var d = JSON.parse(data);
+    if(d['action']){
+      console.log(d);
+    }
     var value = d['normrms'];
+    if(typeof value === "undefined" || value === null){
+      return;
+    }
     volumeBuffer[idx] = value;
     if(idx == 0) {
       sendToConnections(JSON.stringify({
