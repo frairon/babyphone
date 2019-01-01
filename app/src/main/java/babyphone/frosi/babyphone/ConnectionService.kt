@@ -7,9 +7,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.support.v4.app.NotificationCompat
 import android.support.v4.app.NotificationManagerCompat
 import android.support.v4.app.TaskStackBuilder
@@ -23,6 +25,7 @@ import java.io.Serializable
 import java.net.URI
 import java.nio.charset.Charset
 import java.util.*
+import kotlin.math.roundToInt
 
 
 class Volume(val time: Date, val volume: Int) : Serializable {
@@ -88,6 +91,14 @@ class History(private val maxSize: Int) {
         }
         return Duration.between(alarms.lastOrNull()!!, Instant.now())
     }
+
+
+    fun getAutoVolumeThreshold(): Int {
+        if (volumes.size < 10) {
+            return 50
+        }
+        return (volumes.map({ vol -> vol.volume.toDouble() }).average() + 10.0).roundToInt()
+    }
 }
 
 class ConnectionService : Service(), WebSocketClient.Listener {
@@ -99,6 +110,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
 
     var lights: Boolean = false
+
+    var alarmsEnabled: Boolean = true
+
+    var autoVolumeLevel: Boolean = false
 
     var connectionState: ConnectionState = ConnectionState.Disconnected
         private set(value) {
@@ -142,6 +157,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, getString(R.string.nfChannelName), importance);
             channel.description = getString(R.string.nfChannelDesc);
+            channel.enableVibration(true)
+            channel.enableLights(true)
             // Register the channel with the system; you can't change the importance
             // or other notification behaviors after this
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -187,19 +204,11 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle(getString(R.string.nfTitle))
                 .setSmallIcon(R.mipmap.ic_launcher_round)
+                .setAutoCancel(true)
                 .setLargeIcon(
                         Bitmap.createScaledBitmap(icon, 128, 128, false))
                 .setContentIntent(pshowBabyphone)
-                .setOngoing(true)
 
-        when (this.connectionState) {
-            ConnectionState.Connecting ->
-                builder.setContentText(getString(R.string.nfTextConnecting))
-            ConnectionState.Connected ->
-                builder.setContentText(getString(R.string.nfTextConnected))
-            ConnectionState.Disconnected ->
-                builder.setContentText(getString(R.string.nfTextDisconnected))
-        }
 
         if (modify != null) {
             modify(builder)
@@ -208,7 +217,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     private fun startForeground() {
-        startForeground(NOTIFICATION_ID, this.createNotification(null))
+        startForeground(NOTI_SERVICE_ID, this.createNotification(null))
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -238,7 +247,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "Websocket onConnect()")
         connectionState = ConnectionState.Connected
         this.history.clear()
-        doNotify()
+        doNotify({x->this.addConnectionState(x)})
     }
 
     override fun onMessage(message: String) {
@@ -262,38 +271,56 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         }
     }
 
-    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)? = null) {
+    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)? = null, isAlarm: Boolean = false) {
+
         val notification = this.createNotification(modify)
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+        NotificationManagerCompat.from(this).notify(if (isAlarm) NOTI_ALARM_ID else NOTI_SERVICE_ID, notification)
     }
 
+//    private fun doAlarmVibrate() {
+//        val effect = VibrationEffect.createWaveform(arrayOf(900L, 100L, 900L, 100L, 1000L, 500L).toLongArray(), arrayOf(120, 0, 200, 0, 255, 0).toIntArray(), 4)
+//        val vibrator = getSystemService(Vibrator::class.java) as Vibrator
+//        vibrator.vibrate(effect);
+//    }
+
     fun handleVolume(volume: Volume) {
+        if (!alarmsEnabled) {
+            return
+        }
+
+        if (autoVolumeLevel) {
+            val threshold = history.getAutoVolumeThreshold()
+            if (threshold != this.volumeThreshold) {
+                // notify that the gui via broadcast
+                this.volumeThreshold = threshold
+                sendAction(ACTION_AUTOTHRESHOLD_UPDATED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, threshold) })
+            }
+
+        }
+
         if (volume.volume > this.volumeThreshold
-                && history.timeSinceAlarm() > Duration.ofSeconds(20)
-                && history.timesAboveThreshold(Duration.ofSeconds(20), this.volumeThreshold) > 3) {
-
-            val alarmsInPast = history.alarmsSince(Duration.ofSeconds(90))
-
-            val vibratePattern = mutableListOf(0L, 100L)
-            if (alarmsInPast == 1) {
-                vibratePattern.add(100)
-                vibratePattern.add(200)
-            }
-            if (alarmsInPast == 2) {
-                vibratePattern.add(100)
-                vibratePattern.add(300)
-            }
-            if (alarmsInPast >= 3) {
-                vibratePattern.add(100)
-                vibratePattern.add(500)
-            }
+                && history.timeSinceAlarm() > Duration.ofSeconds(10)) {
+            // doAlarmVibrate()
             history.triggerAlarm()
             sendAction(ACTION_ALARM_TRIGGERED)
-            doNotify { builder ->
-                builder.setVibrate(vibratePattern.toLongArray())
-                val lastMinuteAlarms = history.alarmsSince(Duration.ofSeconds(60))
-                builder.setContentInfo("$lastMinuteAlarms Alarms in the last minute")
-            }
+
+            doNotify({ builder ->
+                builder.setLights(Color.RED, 500, 500)
+                builder.setVibrate(arrayOf(2000L, 1000L, 2000L, 1000L, 2000L, 1000L, 10000L).toLongArray())
+                builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+                builder.setContentText("Luise is crying")
+            }, isAlarm = true)
+        }
+    }
+
+    fun addConnectionState(builder: NotificationCompat.Builder) {
+        when (this.connectionState) {
+            ConnectionState.Connecting ->
+                builder.setContentText(getString(R.string.nfTextConnecting))
+            ConnectionState.Connected ->
+                builder.setContentText(getString(R.string.nfTextConnected))
+            ConnectionState.Disconnected ->
+                builder.setContentText(getString(R.string.nfTextDisconnected))
         }
     }
 
@@ -302,7 +329,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "Code: $code - Reason: $reason")
         connectionState = ConnectionState.Disconnected
         stopSocket()
-        doNotify()
     }
 
     override fun onError(error: Exception) {
@@ -311,13 +337,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         connectionState = ConnectionState.Disconnected
         // TODO: should we do a reconnect?
         stopSocket()
-        doNotify { builder ->
-            // if we were connected before, let's vibrate. Otherwise it's an error
-            // while connecting, which is not something unexpected
-            if (oldConnectionState == ConnectionState.Connected) {
-                builder.setVibrate(CONNECTION_ERROR_PATTERN)
-            }
-        }
+        doNotify({x->this.addConnectionState(x)})
     }
 
     private fun startSocket() {
@@ -380,8 +400,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val ACTION_MSG_RECEIVED = "msgReceived"
         val ACTION_NETWORK_STATE_CHANGED = "networkStateChanged"
         val ACTION_ALARM_TRIGGERED = "alarmTriggered"
+        val ACTION_AUTOTHRESHOLD_UPDATED = "autothresholdUpdated"
 
-        val NOTIFICATION_ID = 101
+        val NOTI_SERVICE_ID = 101
+        val NOTI_ALARM_ID = 102
         val NOTIFICATION_CHANNEL_ID = "babyphone_notifications"
 
         fun createActionIntentFilter(): IntentFilter {
@@ -392,6 +414,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             filter.addAction(ConnectionState.Connecting.action)
             filter.addAction(ACTION_MSG_RECEIVED)
             filter.addAction(ACTION_ALARM_TRIGGERED)
+            filter.addAction(ACTION_AUTOTHRESHOLD_UPDATED)
             return filter
         }
 

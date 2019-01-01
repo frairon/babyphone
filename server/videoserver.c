@@ -26,6 +26,7 @@
 #include <gst/gst.h>
 #include <gst/net/gstnettimeprovider.h>
 #include <gst/rtsp-server/rtsp-server.h>
+#include <gst/rtsp/gstrtspconnection.h>
 
 #define DEFAULT_RTSP_PORT "8554"
 
@@ -52,13 +53,18 @@
   "! rtpL16pay name=pay0 pt=96 "
 
 // audio and video in separate streams
-#define AV_LAUNCHLINE                                                          \
+#define VIDEO_LAUNCHLINE_NIGHT                                                 \
   "rpicamsrc preview=false video-direction=90r brightness=90 iso=800 "         \
   "contrast=90 "                                                               \
   "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
   "profile=constrained-baseline "                                              \
   "! rtph264pay name=pay0 pt=96 "
-
+// audio and video in separate streams
+#define VIDEO_LAUNCHLINE_DAY                                                   \
+  "rpicamsrc preview=false video-direction=90r "                               \
+  "! video/x-h264,width=320,height=240,framerate=10/1,"                        \
+  "profile=constrained-baseline "                                              \
+  "! rtph264pay name=pay0 pt=96 "
 
 #else
 
@@ -200,6 +206,42 @@ static gboolean timeout(GstRTSPServer *server) {
   return TRUE;
 }
 
+static void client_closed(GstRTSPClient *client, gpointer user_data) {
+  const gchar *clientIP =
+      gst_rtsp_connection_get_ip(gst_rtsp_client_get_connection(client));
+  g_print("{\"action\":\"client-disconnected\", \"ip\":\"%s\"}\n", clientIP);
+}
+
+static void streamClosed(GstRTSPMedia *media, GstRTSPStream *stream,
+                         gpointer user_data) {
+  g_print("{\"action\":\"stream-removed\"}\n");
+}
+
+static void media_state_changed(GstRTSPMedia *gstrtspmedia, gint state,
+                                gpointer user_data) {
+  g_print("State changed %d\n", state);
+}
+
+static void video_started(GstRTSPMediaFactory *factory, GstRTSPMedia *media,
+                          gpointer user_data) {
+  g_print("{\"action\":\"video-started\"}\n");
+
+  g_signal_connect(media, "new-state",(GCallback) media_state_changed, NULL);
+
+  gulong id =
+      g_signal_connect(media, "removed-stream", (GCallback)streamClosed, NULL);
+  if (id <= 0) {
+    g_print("connecting signals failed\n");
+  }
+}
+
+static void client_connected(GstRTSPServer *gstrtspserver,
+                             GstRTSPClient *client, gpointer user_data) {
+  const gchar *clientIP =
+      gst_rtsp_connection_get_ip(gst_rtsp_client_get_connection(client));
+  g_print("{\"action\":\"client-connected\", \"ip\":\"%s\"}\n", clientIP);
+}
+
 int main(int argc, char *argv[]) {
   int optsResult = handleOptions(&argc, &argv);
   if (optsResult != 0) {
@@ -220,11 +262,17 @@ int main(int argc, char *argv[]) {
   g_object_set(server, "service", port, NULL);
   GstRTSPMountPoints *mounts = gst_rtsp_server_get_mount_points(server);
 
-  g_print("video pipeline: %s\n", AV_LAUNCHLINE);
-  GstRTSPMediaFactory *avFactory = gst_rtsp_media_factory_new();
-  gst_rtsp_media_factory_set_launch(avFactory, AV_LAUNCHLINE);
-  gst_rtsp_media_factory_set_shared(avFactory, TRUE);
-  gst_rtsp_media_factory_set_clock(avFactory, clock);
+  GstRTSPMediaFactory *avFactoryNight = gst_rtsp_media_factory_new();
+  gst_rtsp_media_factory_set_suspend_mode(avFactoryNight,
+                                          GST_RTSP_SUSPEND_MODE_PAUSE);
+  gst_rtsp_media_factory_set_launch(avFactoryNight, VIDEO_LAUNCHLINE_NIGHT);
+  gst_rtsp_media_factory_set_shared(avFactoryNight, TRUE);
+  gst_rtsp_media_factory_set_clock(avFactoryNight, clock);
+
+  GstRTSPMediaFactory *avFactoryDay = gst_rtsp_media_factory_new();
+  gst_rtsp_media_factory_set_launch(avFactoryDay, VIDEO_LAUNCHLINE_DAY);
+  gst_rtsp_media_factory_set_shared(avFactoryDay, TRUE);
+  gst_rtsp_media_factory_set_clock(avFactoryDay, clock);
 
   g_print("audio pipeline: %s\n", AUDIO_LAUNCHLINE);
   GstRTSPMediaFactory *audioFactory = gst_rtsp_media_factory_new();
@@ -232,8 +280,14 @@ int main(int argc, char *argv[]) {
   gst_rtsp_media_factory_set_shared(audioFactory, TRUE);
   gst_rtsp_media_factory_set_clock(audioFactory, clock);
 
-  gst_rtsp_mount_points_add_factory(mounts, "/audiovideo", avFactory);
+  gst_rtsp_mount_points_add_factory(mounts, "/audiovideo", avFactoryNight);
+  gst_rtsp_mount_points_add_factory(mounts, "/audiovideoday", avFactoryDay);
   gst_rtsp_mount_points_add_factory(mounts, "/audio", audioFactory);
+
+  g_signal_connect(avFactoryNight, "media-configure", (GCallback)video_started,
+                   NULL);
+  g_signal_connect(server, "client-connected", (GCallback)client_connected,
+                   NULL);
 
   g_object_unref(mounts);
   gst_rtsp_server_attach(server, NULL);

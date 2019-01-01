@@ -109,16 +109,14 @@
                 android:id="@+id/graph_volume"
                 android:layout_width="0dp"
                 android:layout_height="150dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
                 android:layout_marginTop="8dp"
-                app:layout_constraintBottom_toTopOf="@+id/vol_alarm_seeker"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/button_shutdown"
-                app:layout_constraintVertical_bias="0.0" />
+                app:layout_constraintTop_toBottomOf="@+id/button_shutdown" />
 
             <ImageButton
                 android:id="@+id/button_shutdown"
@@ -184,19 +182,19 @@
             <SeekBar
                 android:id="@+id/vol_alarm_seeker"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
+                android:layout_height="22dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginBottom="8dp"
                 android:max="100"
                 android:progress="50"
                 android:thumb="@drawable/ic_volume_down_black_24dp"
                 app:layout_constraintBottom_toTopOf="@+id/surface_video"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/graph_volume" />
+                app:layout_constraintTop_toBottomOf="@+id/vol_alarm_enabled" />
 
             <ImageButton
                 android:id="@+id/button_video"
@@ -230,6 +228,30 @@
                 app:layout_constraintHorizontal_bias="1.0"
                 app:layout_constraintStart_toEndOf="@+id/button_stop"
                 android:src="@drawable/ic_lightbulb_outline_black_24dp" />
+
+            <Switch
+                android:id="@+id/vol_alarm_enabled"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:checked="true"
+                android:text="Alarms"
+                app:layout_constraintStart_toStartOf="@+id/graph_volume"
+                app:layout_constraintTop_toBottomOf="@+id/graph_volume" />
+
+            <Switch
+                android:id="@+id/vol_alarm_auto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
+                android:checked="true"
+                android:text="Auto"
+                app:layout_constraintBottom_toBottomOf="@+id/vol_alarm_enabled"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="1.0"
+                app:layout_constraintStart_toEndOf="@+id/vol_alarm_enabled"
+                app:layout_constraintTop_toTopOf="@+id/vol_alarm_enabled" />
 
         </android.support.constraint.ConstraintLayout>
     </android.support.v4.widget.NestedScrollView>

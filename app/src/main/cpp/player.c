@@ -440,8 +440,8 @@ static void gst_native_pause(JNIEnv *env, jobject thiz) {
     CustomData *data = GET_CUSTOM_DATA (env, thiz, custom_data_field_id);
     if (!data) return;
     GST_DEBUG ("Setting state to PAUSED");
-    data->target_state = GST_STATE_PAUSED;
-    data->is_live = (gst_element_set_state(data->pipeline, GST_STATE_PAUSED) ==
+    data->target_state = GST_STATE_NULL;
+    data->is_live = (gst_element_set_state(data->pipeline, GST_STATE_NULL) ==
                      GST_STATE_CHANGE_NO_PREROLL);
 }
 

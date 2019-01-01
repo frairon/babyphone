@@ -104,6 +104,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         }
 
+
+
         val btnLights = this.findViewById<View>(R.id.btn_lights) as ImageButton
         btnLights.setOnClickListener {
             this.service?.toggleLights();
@@ -130,8 +132,28 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         })
         setGraphThreshold(volumeSeek.progress)
+
+        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
+        volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
+            volumeSeek.isEnabled = !isChecked
+            activity.service?.autoVolumeLevel=isChecked
+        }
+
+        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
+        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
+            volAlarmAuto.isEnabled = isChecked
+            volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
+            this.service?.alarmsEnabled = isChecked
+        }
+
+        volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
+        volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
+        activity.service?.autoVolumeLevel=volAlarmAuto.isChecked
+
+
         val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         connecting.visibility = View.GONE
+
 
         connectToServiceBroadcast()
         this.player?.initialize()
@@ -182,7 +204,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         vp.setMinX(this.volumeSeries.lowestValueX)
         vp.setMaxX(this.volumeSeries.highestValueX)
 
-        graph.getGridLabelRenderer().setNumHorizontalLabels(2)
+        graph.getGridLabelRenderer().setNumHorizontalLabels(3)
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
@@ -190,7 +212,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     companion object {
-        val MAX_GRAPH_ELEMENTS = 300
+        val MAX_GRAPH_ELEMENTS = 120
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -206,6 +228,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
         volumeSeek.progress = this.service!!.volumeThreshold
         this.setGraphThreshold(volumeSeek.progress)
+
+        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
+        this.service!!.autoVolumeLevel=volAlarmAuto.isChecked
+
+
     }
 
     fun initVolumeHistory() {
@@ -291,6 +318,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                             }
                             ConnectionService.ACTION_ALARM_TRIGGERED -> {
                                 activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
+                            }
+                            ConnectionService.ACTION_AUTOTHRESHOLD_UPDATED ->{
+                                val volume = intent.getIntExtra(ConnectionService.ACTION_EXTRA_VOLUME, 50)
+                                setGraphThreshold(volume)
+                                val volumeSeek = activity.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+                                volumeSeek.progress = volume
                             }
                             else -> {
                                 Log.w("websocket", "unhandled action in intent:" + intent.action)
