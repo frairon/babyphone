@@ -1,4 +1,6 @@
 server/node_modules/
+server/venv
+*.pyc
 .tags*
 client
 
