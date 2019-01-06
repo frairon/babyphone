@@ -1,0 +1,13 @@
+[Unit]
+Description=Pigpio GPIO daemon
+
+[Service]
+Type=forking
+EnvironmentFile=-/etc/default/pigpio
+ExecStart=/usr/bin/pigpiod $PIGPIO_OPTS
+TimeoutStopSec=3
+PIDFile=/run/pigpio.pid
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

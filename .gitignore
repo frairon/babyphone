@@ -1,5 +1,5 @@
-server/node_modules/
-server/venv
+babyphone/node_modules/
+babyphone/venv
 *.pyc
 .tags*
 client

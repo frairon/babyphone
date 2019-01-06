@@ -1,0 +1,20 @@
+[Unit]
+Description=Babyphone app
+After=syslog.target pigpio.service
+
+[Service]
+Type=simple
+PIDFile=/var/local/babyphone.pid
+ExecStart=/usr/bin/python -m babyphone.service --write-stats --log-dir /var/log/
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=Babyphone
+ExecReload=/bin/kill $MAINPID
+ExecStop=/bin/kill $MAINPID
+KillMode=process
+Restart=on-failure
+RestartSec=10
+
+
+[Install]
+WantedBy=multi-user.target

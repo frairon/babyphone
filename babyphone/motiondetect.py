@@ -1,13 +1,15 @@
-import asyncio
 import logging
-import server
+
+import asyncio
+
 
 class MotionDetect(object):
 
-    def __init__(self):
+    def __init__(self, babyphone):
         self._interval = 10
-        self._camBlocked = False
+        self._takingPicture = False
         self._runner = None
+        self._bp = babyphone
 
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
@@ -39,14 +41,18 @@ class MotionDetect(object):
         while True:
             await asyncio.sleep(self._interval)
 
-            if await server.Connection.isAnyoneStreaming():
-                logging.info("at least one connection is streaming, camera is busy, cannot do motion detection")
+            if await self._bp.isAnyoneStreaming():
+                logging.info(
+                    "at least one connection is streaming, camera is busy, cannot do motion detection")
                 continue
 
             try:
-                self._camBlocked = True
+                self._takingPicture = True
                 await self._takePicture()
             finally:
-                self._camBlocked = False
+                self._takingPicture = False
 
             self._comparePictures()
+
+    def isTakingPicture(self):
+        return self._takingPicture
