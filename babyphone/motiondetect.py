@@ -21,34 +21,39 @@ class MotionDetect(object):
         self._runner.cancel()
         self._runner = None
 
-    async def _takePicture(self):
+    @asyncio.coroutine
+    def _takePicture(self):
+
         try:
             import picamera
             cam = picamera.Camera()
             # simulate to do something with the camera
-            await asyncio.sleep(1)
+            yield from asyncio.sleep(1)
         except Exception as e:
             logging.info("Error initializing camera: %s", e)
         finally:
             if cam:
                 cam.close()
 
-    async def comparePictures(self):
+    @asyncio.coroutine
+    def comparePictures(self):
         logging.info("comparing pictures...")
         pass
 
-    async def _run(self):
+    @asyncio.coroutine
+    def _run(self):
         while True:
-            await asyncio.sleep(self._interval)
+            yield from asyncio.sleep(self._interval)
 
-            if await self._bp.isAnyoneStreaming():
+            anyoneStreaming = yield from self._bp.isAnyoneStreaming()
+            if anyoneStreaming:
                 logging.info(
                     "at least one connection is streaming, camera is busy, cannot do motion detection")
                 continue
 
             try:
                 self._takingPicture = True
-                await self._takePicture()
+                yield from self._takePicture()
             finally:
                 self._takingPicture = False
 

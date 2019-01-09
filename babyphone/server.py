@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
+import argparse
+from datetime import datetime
 import logging
 import signal
-import argparse
+
 import asyncio
-import babyphone
+from babyphone import babyphone
 import websockets
-import datetime
 
 loop = asyncio.get_event_loop()
 
@@ -16,7 +17,8 @@ def signalStop():
     loop.stop()
 
 
-async def writeStats():
+@asyncio.coroutine
+def writeStats():
     import psutil
     logFormatter = logging.Formatter(
         "%(asctime)s [%(levelname)-5.5s]  %(message)s")
@@ -34,7 +36,7 @@ async def writeStats():
         memory = psutil.virtual_memory()
         statLogger.info("CPU: %.2f Memory left: %sMb",
                         cpu, memory.available / MB)
-        await asyncio.sleep(10)
+        yield from asyncio.sleep(10)
 
 
 if __name__ == '__main__':
@@ -44,9 +46,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("Babyphone")
     parser.add_argument("--write-stats", dest="writeStats",
                         action="store_true", help="Enable writing stats to separate file for performance debugging. Requires psutil package")
+    args = parser.parse_args()
 
     bp = babyphone.Babyphone()
-    asyncio.ensure_future(writeStats())
+    if args.writeStats:
+        asyncio.ensure_future(writeStats())
     loop.add_signal_handler(signal.SIGINT, signalStop)
-    loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8765))
+    loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
     loop.run_forever()

@@ -32,6 +32,11 @@ test-remote:
 		`pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-rtsp-1.0 gstreamer-net-1.0 gstreamer-base-1.0` -lm'
 
 
+install-remote:
+	ssh ${CAMHOST} 'mkdir -p /home/pi/pythonbabyphone'
+	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${CAMHOST}:/home/pi/pythonbabyphone/
+	ssh ${CAMHOST} 'cd /home/pi/pythonbabyphone && sudo python3 setup.py install'
+
 remote-logs:
 	ssh ${CAMHOST} 'pm2 logs index --lines=100'
 

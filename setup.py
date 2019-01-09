@@ -12,8 +12,8 @@ from setuptools import find_packages, setup
 
 here = path.abspath(path.dirname(__file__))
 
-if sys.version_info < (3, 0):
-    sys.exit('Sorry, need python3 for the Babyphone')
+if sys.version_info < (3, 5):
+    sys.exit('Sorry, need at least python3.5 for the Babyphone')
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
