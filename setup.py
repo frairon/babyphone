@@ -38,5 +38,7 @@ setup(
 
     install_requires=[
         'websockets',
-        'psutil'],
+        'psutil',
+        'RPi.GPIO',
+        ],
 )

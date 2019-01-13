@@ -2,7 +2,6 @@ import logging
 
 import asyncio
 
-
 class MotionDetect(object):
 
     def __init__(self, babyphone):
@@ -10,6 +9,7 @@ class MotionDetect(object):
         self._takingPicture = False
         self._runner = None
         self._bp = babyphone
+        self.log = logging.getLogger("babyphone")
 
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
@@ -30,14 +30,14 @@ class MotionDetect(object):
             # simulate to do something with the camera
             yield from asyncio.sleep(1)
         except Exception as e:
-            logging.info("Error initializing camera: %s", e)
+            self.log.info("Error initializing camera: %s", e)
         finally:
             if cam:
                 cam.close()
 
     @asyncio.coroutine
     def comparePictures(self):
-        logging.info("comparing pictures...")
+        self.log.info("comparing pictures...")
         pass
 
     @asyncio.coroutine
@@ -47,7 +47,7 @@ class MotionDetect(object):
 
             anyoneStreaming = yield from self._bp.isAnyoneStreaming()
             if anyoneStreaming:
-                logging.info(
+                self.log.info(
                     "at least one connection is streaming, camera is busy, cannot do motion detection")
                 continue
 

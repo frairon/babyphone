@@ -3,17 +3,31 @@
 import json
 import logging
 import subprocess
+import sys
 import time
 
+import websockets.exceptions
+
 import asyncio
-import pigpio
+import RPi.GPIO as gpio
 from babyphone import motiondetect
 
-pigpio.exceptions = True
 
 class InvalidMessageException(Exception):
     pass
 
+
+log = None
+
+
+def initLogger():
+    global log
+    log = logging.getLogger('babyphone')
+    log.setLevel(logging.DEBUG)
+    consoleHandler = logging.StreamHandler(stream=sys.stdout)
+    consoleHandler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)-5.5s]  %(message)s"))
+    log.addHandler(consoleHandler)
 
 @asyncio.coroutine
 def handleVideoserverOutput(proc, bp):
@@ -33,11 +47,11 @@ def handleVideoserverOutput(proc, bp):
         try:
             parsed = json.loads(line.decode('utf-8'))
         except json.JSONDecodeError as e:
-            # logging.debug(
+            # log.debug(
             #     "Error parsing videoserver output as json: %s", parsed)
             continue
 
-        # logging.debug("videoserver output %s", line)
+        # log.debug("videoserver output %s", line)
 
         normRms = parsed.get('normrms', -1)
         if normRms == -1:
@@ -58,17 +72,18 @@ def runStreamServer(bp):
     while True:
         proc = None
         try:
-            logging.debug("starting videoserver")
-            proc = yield from asyncio.create_subprocess_exec("/home/pi/babyphone/videoserver", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            log.debug("starting videoserver")
+            proc = yield from asyncio.create_subprocess_exec("/home/pi/babyphone/videoserver",
+                                                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             yield from handleVideoserverOutput(proc, bp)
         except Exception as e:
-            logging.error("Received while running the videoserver: %s", e)
+            log.error("Received while running the videoserver: %s", e)
         finally:
             if proc and proc.returncode is None:
                 proc.terminate()
             if proc:
-                logging.info("return code was %s", proc.returncode)
-            logging.info("Video server ended. Restarting it.")
+                log.info("return code was %s", proc.returncode)
+            log.info("Video server ended. Restarting it.")
             # sleep to avoid busy loop in case of permanent error
             yield from asyncio.sleep(3)
 
@@ -78,22 +93,18 @@ class Babyphone(object):
     LIGHTS_GPIO = 24
 
     def __init__(self):
-        logging.debug("starting babyphone")
+        log.debug("starting babyphone")
         self.conns = set()
         self.motion = motiondetect.MotionDetect(self)
-        self.pi = pigpio.pi()
 
-        if self.pi is None or not self.pi.connected:
-            raise Exception("Error initializing pi")
-        logging.info("pi version is %s",
-                     self.pi.get_hardware_revision())
-        logging.debug("configuring GPIO")
-        self.pi.set_mode(self.LIGHTS_GPIO, pigpio.OUTPUT)
+        log.debug("configuring GPIO")
+        gpio.setmode(gpio.BCM)
+        gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
-        logging.debug("starting streaming server")
+        log.debug("starting streaming server")
         self.streamServer = asyncio.ensure_future(runStreamServer(self))
 
-        logging.debug("...done")
+        log.debug("...done")
 
     @asyncio.coroutine
     def broadcast(self, obj):
@@ -107,10 +118,11 @@ class Babyphone(object):
     def close(self):
         self.motion.stop()
         self.streamServer.cancel()
+        gpio.cleanup()
 
     def shutdown(self, conn):
-        logging.info("Shutting down machine as requested by %s", str(conn))
-        self.bp.broadcast({
+        log.info("Shutting down machine as requested by %s", str(conn))
+        self.broadcast({
             "action": "status_update",
             "status": "shutting-down"
         })
@@ -139,8 +151,8 @@ class Babyphone(object):
         self.setLights(needLights and self.isAnyoneStreaming())
 
     def setLights(self, on):
-        logging.info("turning lights %s", "on" if on else "off")
-        self.pi.write(self.LIGHTS_GPIO, 1 if on else 0)
+        log.info("turning lights %s", "on" if on else "off")
+        gpio.output(self.LIGHTS_GPIO, bool(on))
 
 
 class Connection(object):
@@ -155,7 +167,7 @@ class Connection(object):
 
         self.useLights = False
 
-        logging.info("Client connected")
+        log.info("Client connected")
 
         self._heartbeat = asyncio.ensure_future(self.heartbeat())
 
@@ -166,29 +178,27 @@ class Connection(object):
     def run(self):
         try:
             while True:
-                if self._ws.closed:
-                    logging.info("websocket cosed. Stopping message loop")
-                    break
                 message = yield from self._ws.recv()
                 try:
                     yield from self.handleMessage(message)
                 except Exception as e:
-                    logging.error("Error handling message: %s", e)
-            logging.info("done message done loop. Will disconnect now, if we didn't do already")
+                    log.error("Error handling message: %s", e)
+            log.info(
+                "done message done loop. Will disconnect now, if we didn't do already")
+        except websockets.exceptions.ConnectionClosed as e:
+            log.info("websocket cosed. terminating connection")
         finally:
-            logging.info("disconnecting from run")
             yield from self.disconnect()
 
     @asyncio.coroutine
     def heartbeat(self):
-        logging.info("Starting heartbeating to client")
+        log.info("Starting heartbeating to client")
         while True:
             try:
                 yield from asyncio.sleep(1)
                 yield from self._send({'action': 'heartbeat'})
-            except Exception as e:
-                logging.error("Error heartbeating: %s", e)
-                # yield from self.disconnect()
+            except websockets.exceptions.ConnectionClosed as e:
+                return
 
     @asyncio.coroutine
     def _send(self, obj):
@@ -202,7 +212,7 @@ class Connection(object):
             raise InvalidMessageException("action not in message")
 
         if msg['action'] == 'shutdown':
-            self.bp.shutdown()
+            self.bp.shutdown(self)
         elif msg['action'] == 'startstream':
             self.state = self.STREAMING
         elif msg['action'] == 'stopstream':
@@ -214,14 +224,14 @@ class Connection(object):
         elif msg['action'] == 'lightsoff':  # deprecated, remove
             self.bp.setLights(False)
         else:
-            logging.error(
+            log.error(
                 "Unhandled message from connection %s: %s", self, message)
 
-        yield from self.bp.updateState()
+        # yield from self.bp.updateState()
 
     @asyncio.coroutine
     def disconnect(self):
-        logging.info("disconnecting websocket")
+        log.info("disconnecting websocket")
         try:
             self._heartbeat.cancel()
             # idempotent

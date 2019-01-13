@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime
 import logging
 import signal
+import sys
 
 import asyncio
 from babyphone import babyphone
@@ -40,14 +41,11 @@ def writeStats():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(format="%(asctime)s [%(levelname)-5.5s]  %(message)s",
-                        level=logging.DEBUG)
-
     parser = argparse.ArgumentParser("Babyphone")
     parser.add_argument("--write-stats", dest="writeStats",
                         action="store_true", help="Enable writing stats to separate file for performance debugging. Requires psutil package")
     args = parser.parse_args()
-
+    babyphone.initLogger()
     bp = babyphone.Babyphone()
     if args.writeStats:
         asyncio.ensure_future(writeStats())

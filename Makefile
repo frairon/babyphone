@@ -36,17 +36,12 @@ install-remote:
 	ssh ${CAMHOST} 'mkdir -p /home/pi/pythonbabyphone'
 	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${CAMHOST}:/home/pi/pythonbabyphone/
 	ssh ${CAMHOST} 'cd /home/pi/pythonbabyphone && sudo python3 setup.py install'
+	ssh ${CAMHOST} 'cd /home/pi/pythonbabyphone && make autostart'
 
-remote-logs:
-	ssh ${CAMHOST} 'pm2 logs index --lines=100'
-
-
-# setting up the index with pm2:
-# go to babyphone folder
-# pm2 start index.js
-# pm2 startup
-# --> execute the script being printed
-
+autostart:
+	sudo cp systemd/* /etc/systemd/system/
+	sudo systemctl daemon-reload
+	sudo systemctl restart babyphone
 
 test-audio:
 	GST_DEBUG=WARN gst-launch-1.0 -m playbin latency=500000000 uri=rtsp://${CAMHOST}:8554/audio
@@ -84,11 +79,6 @@ cclient:
 	 `pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-net-1.0` -lm
 	GST_DEBUG=WARN ./client
 
-
-# list devices:
-# pacmd list-sources
-# then use "device.id
-
 # Packages to install
 sys-setup:
 	sudo apt-get install dstat git
@@ -99,28 +89,6 @@ sys-setup:
 	sudo apt-get install libgstreamer-plugins-bad1.0-dev libgstreamer-plugins-base1.0-dev \
 	libgstreamer1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-libav
 
-setup-server:
-	curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
-	sudo apt-get install -y nodejs
-	sudo npm install -g pm2
-
-	# on raspi-zero:
-	# wget https://nodejs.org/dist/v10.1.0/node-v10.1.0-linux-armv6l.tar.xz
-	# sudo mkdir /usr/local/lib/nodejs
-  # sudo tar -xJvf node-v10.1.0-linux-armv6l.tar.xz -C /usr/local/lib/nodejs
-  # sudo mv /usr/local/lib/nodejs/node-$VERSION-$DISTRO /usr/local/lib/nodejs/node-v10.1.0
-	# add to .profile:
-	# export NODEJS_HOME=/usr/local/lib/nodejs/node-v10.1.0/bin
-	#export PATH=$NODEJS_HOME:$PATH
-
-	# install and configure logrotate
-	pm2 install pm2-logrotate
-	# rotate every hour
-	pm2 set pm2-logrotate:rotateInterval '0 */1 * * *'
-	# keep the last 10 logs
-	pm2 set pm2-logrotate:retain 10
-
-
 ## To find the name of the audio device
 list-sources:
 	pacmd list-sources
@@ -129,7 +97,6 @@ list-sources:
 # https://gist.github.com/ajfisher/a84889e64565d7a74888
 hotspot-setup:
 	apt-get install hostapd wpasupplicant dnsmasq
-
 
 # 2018-12-09
 # client just dies and does not play anything.
