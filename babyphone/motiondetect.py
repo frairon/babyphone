@@ -1,11 +1,16 @@
+import asyncio
+import io
 import logging
 
-import asyncio
+import cv2
+import numpy as np
+import picamera
+from skimage.measure import compare_ssim
 
 class MotionDetect(object):
 
     def __init__(self, babyphone):
-        self._interval = 10
+        self._interval = 5
         self._takingPicture = False
         self._runner = None
         self._bp = babyphone
@@ -22,27 +27,43 @@ class MotionDetect(object):
         self._runner = None
 
     @asyncio.coroutine
-    def _takePicture(self):
+    def _takePicture(self, nightMode):
 
         try:
-            import picamera
-            cam = picamera.Camera()
-            # simulate to do something with the camera
-            yield from asyncio.sleep(1)
+            with picamera.PiCamera(resolution=(640,480)) as cam:
+                yield from asyncio.sleep(1)
+                # simulate to do something with the camera
+                stream = io.BytesIO()
+                if nightMode:
+                    self._bp.setLights(True)
+                    yield from async.sleep(0.1)
+                cam.capture(stream, format='jpeg')
+                if nightMode:
+                    self._bp.setLights(False)
+            # Construct a numpy array from the stream
+            data = np.fromstring(stream.getvalue(), dtype=np.uint8)
+            # "Decode" the image from the array, preserving color
+            image = cv2.imdecode(data, 1)
+            self.log.info("Took picture")
+            return image
         except Exception as e:
-            self.log.info("Error initializing camera: %s", e)
-        finally:
-            if cam:
-                cam.close()
+            self.log.info("Error taking picture: %s", e)
 
     @asyncio.coroutine
-    def comparePictures(self):
+    def _comparePictures(self, img1, img2):
+
         self.log.info("comparing pictures...")
-        pass
+        s = compare_ssim(cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY), cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY))
+        self.log.info("image sim: %f" % s)
 
     @asyncio.coroutine
     def _run(self):
+        oldPicture = None
+
+        nightMode = False
+
         while True:
+            self.log.info("Motion detect runner next loop")
             yield from asyncio.sleep(self._interval)
 
             anyoneStreaming = yield from self._bp.isAnyoneStreaming()
@@ -53,11 +74,32 @@ class MotionDetect(object):
 
             try:
                 self._takingPicture = True
-                yield from self._takePicture()
+                picture = yield from self._takePicture(nightMode)
+
+                # it seems to be too dark or too bright, let's try different mode next time
+                if self._isTooDark(picture):
+                    nightMode = True
+                    self.log.info("Image is too dark, will try in night mode next time")
+                    continue
+                if self._isTooBright(picture):
+                    nightMode = False
+                    self.log.info("Image is too bright, will try in day mode next time")
+                    continue
+
+                if oldPicture is not None:
+                    yield from self._comparePictures(oldPicture, picture)
+
+                oldPicture = picture
+            except Exception as e:
+                self.log.info("Error taking picture: %s. Trying next time", e)
             finally:
                 self._takingPicture = False
 
-            self._comparePictures()
+    def _isTooDark(self, image):
+        return False
+
+    def _isTooBright(self, image):
+        return False
 
     def isTakingPicture(self):
         return self._takingPicture

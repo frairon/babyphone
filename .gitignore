@@ -10,3 +10,8 @@ gradle
 *.iml
 build/
 local.properties
+
+venv/
+babyphone/__pycache__
+babyphone.egg-info
+dist

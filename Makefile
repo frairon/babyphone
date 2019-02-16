@@ -14,13 +14,13 @@ test2:
 
 remote:
 	ssh ${CAMHOST} 'mkdir -p /home/pi/babyphone'
-	scp server/*.* ${CAMHOST}:/home/pi/babyphone/
+	scp babyphone/*.* ${CAMHOST}:/home/pi/babyphone/
 	ssh ${CAMHOST} 'cd /home/pi/babyphone && gcc -D PI \
 		`pkg-config --cflags glib-2.0 gstreamer-1.0 \
 		gstreamer-rtsp-server-1.0 gstreamer-rtsp-1.0 gstreamer-net-1.0 gstreamer-base-1.0` \
 		videoserver.c -o videoserver \
 		`pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-rtsp-1.0 gstreamer-net-1.0 gstreamer-base-1.0` -lm'
-	ssh ${CAMHOST} 'PATH=/usr/local/lib/nodejs/node-v10.1.0/bin:$$PATH pm2 restart index'
+#	ssh ${CAMHOST} 'PATH=/usr/local/lib/nodejs/node-v10.1.0/bin:$$PATH pm2 restart index'
 
 test-remote:
 	ssh ${CAMHOST} 'mkdir -p /tmp/babyphone'
@@ -88,6 +88,8 @@ sys-setup:
 
 	sudo apt-get install libgstreamer-plugins-bad1.0-dev libgstreamer-plugins-base1.0-dev \
 	libgstreamer1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-libav
+
+	sudo apt-get install python3-dev libatlas-base-dev python3-picamera python3-skimage libjasper-dev
 
 ## To find the name of the audio device
 list-sources:

@@ -103,8 +103,13 @@ class Babyphone(object):
 
         log.debug("starting streaming server")
         self.streamServer = asyncio.ensure_future(runStreamServer(self))
-
         log.debug("...done")
+
+        log.debug("starting motion detection")
+        self.motion.start()
+        log.debug("done")
+
+
 
     @asyncio.coroutine
     def broadcast(self, obj):

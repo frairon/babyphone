@@ -7,26 +7,27 @@ import websockets
 import logging
 import signal
 
-logging.basicConfig(level=logging.DEBUG)
 
-@asyncio.async
+@asyncio.coroutine
 def runClient():
     websocket = yield from websockets.connect(
-            'ws://localhost:8765'):
+            'ws://localhost:8765')
     try:
         while True:
-            msg = await websocket.recv()
+            msg = yield from websocket.recv()
             logging.info("message: %s", msg)
     finally:
         yield from websocket.close()
 
 
-loop = asyncio.get_event_loop()
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    loop = asyncio.get_event_loop()
 
-def signalStop():
-    logging.info("stopping by signal")
-    loop.stop()
+    def signalStop():
+        logging.info("stopping by signal")
+        loop.stop()
 
-loop.add_signal_handler(signal.SIGINT, signalStop)
+    loop.add_signal_handler(signal.SIGINT, signalStop)
 
-loop.run_until_complete(runClient())
+    loop.run_until_complete(runClient())
