@@ -1,4 +1,6 @@
-server/node_modules/
+babyphone/node_modules/
+babyphone/venv
+*.pyc
 .tags*
 client
 
@@ -8,3 +10,8 @@ gradle
 *.iml
 build/
 local.properties
+
+venv/
+babyphone/__pycache__
+babyphone.egg-info
+dist
