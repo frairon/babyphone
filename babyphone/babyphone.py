@@ -228,6 +228,11 @@ class Connection(object):
             self.bp.setLights(True)
         elif msg['action'] == 'lightsoff':  # deprecated, remove
             self.bp.setLights(False)
+        elif msg['action'] == 'motiondetect':
+            if msg.get('value', False):
+                self.motiondetect.start()
+            else:
+                self.motiondetect.stop()
         else:
             log.error(
                 "Unhandled message from connection %s: %s", self, message)
