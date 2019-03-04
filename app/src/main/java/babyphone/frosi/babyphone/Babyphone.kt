@@ -306,7 +306,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     override fun onReceive(context: Context, intent: Intent) {
                         when (intent.action) {
                             ConnectionService.ConnectionState.findState(intent.action)?.action -> {
-                                setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
+                                setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!, true)
                             }
                             ConnectionService.ACTION_VOLUME_RECEIVED -> {
                                 val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?

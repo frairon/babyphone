@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.provider.Settings
 import android.support.v4.app.NotificationCompat
@@ -109,6 +110,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     var volumeThreshold: Int = 50
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
 
+    var handler = Handler()
+
     var lights: Boolean = false
 
     var alarmsEnabled: Boolean = true
@@ -142,11 +145,11 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private val mMessageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val networkIsOn = intent.getBooleanExtra(ACTION_NETWORK_STATE_CHANGED, false)
-            if (networkIsOn) {
-                startSocket()
-            } else {
-                stopSocket()
-            }
+//            if (networkIsOn) {
+//                startSocket()
+//            } else {
+//                stopSocket()
+//            }
         }
     }
 
@@ -247,7 +250,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "Websocket onConnect()")
         connectionState = ConnectionState.Connected
         this.history.clear()
-        doNotify({x->this.addConnectionState(x)})
+        doNotify({ x -> this.addConnectionState(x) })
     }
 
     override fun onMessage(message: String) {
@@ -267,7 +270,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             this.handleVolume(vol)
             sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, vol) })
         } else {
-            Log.w(TAG, "Unparsed message from websocket received. Ignoring")
+            Log.d(TAG, "Unparsed message from websocket received. Ignoring: " + parsed)
         }
     }
 
@@ -304,16 +307,24 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             history.triggerAlarm()
             sendAction(ACTION_ALARM_TRIGGERED)
 
+            val disableAlarmIntent = Intent(this, ConnectionService::class.java)
+                    .setAction(ACTION_DISABLE_ALARM)
+                    .putExtra("extra-field", 0)
+
+            val disableAlarmPending =
+                    PendingIntent.getBroadcast(this, 0, disableAlarmIntent, 0);
+
             doNotify({ builder ->
                 builder.setLights(Color.RED, 500, 500)
                 builder.setVibrate(arrayOf(2000L, 1000L, 2000L, 1000L, 2000L, 1000L, 10000L).toLongArray())
                 builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
                 builder.setContentText("Luise is crying")
+                builder.addAction(R.drawable.ic_snooze_black_24dp, "snooze", disableAlarmPending);
             }, isAlarm = true)
         }
     }
 
-    fun addConnectionState(builder: NotificationCompat.Builder) {
+    fun addConnectionState(builder: NotificationCompat.Builder): NotificationCompat.Builder {
         when (this.connectionState) {
             ConnectionState.Connecting ->
                 builder.setContentText(getString(R.string.nfTextConnecting))
@@ -322,32 +333,43 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             ConnectionState.Disconnected ->
                 builder.setContentText(getString(R.string.nfTextDisconnected))
         }
+
+        return builder
     }
 
     override fun onDisconnect(code: Int, reason: String) {
         Log.i(TAG, "Websocket onDisconnect()")
         Log.i(TAG, "Code: $code - Reason: $reason")
         connectionState = ConnectionState.Disconnected
-        stopSocket()
+        handler.postDelayed({
+            startSocket(true)
+        }, 3000)
+        doNotify({ x -> this.addConnectionState(x) })
     }
 
     override fun onError(error: Exception) {
         Log.e(TAG, "Websocket connection: " + error.toString())
         val oldConnectionState = connectionState
         connectionState = ConnectionState.Disconnected
-        // TODO: should we do a reconnect?
-        stopSocket()
-        doNotify({x->this.addConnectionState(x)})
+        handler.postDelayed({
+            startSocket(true)
+        }, 3000)
+
+        doNotify({ x -> this.addConnectionState(x) })
     }
 
-    private fun startSocket() {
+    private fun startSocket(reconnect: Boolean = false) {
         if (this.currentUri == null) {
             Log.i(TAG, "No host configured. Will not attempt to connect")
             return
         }
         if (mWebSocketClient != null) {
-            Log.i(TAG, "already connected, not restarting socket.")
-            return
+            if (reconnect) {
+                mWebSocketClient!!.disconnect()
+            } else {
+                Log.i(TAG, "already connected, not restarting socket.")
+                return
+            }
         }
         mWebSocketClient = WebSocketClient(URI.create(this.currentUri), this, null)
         mWebSocketClient!!.connect()
@@ -355,13 +377,13 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         connectionState = ConnectionState.Connecting
     }
 
+
     private fun stopSocket() {
+        Log.i(TAG, "stop socket called")
         if (mWebSocketClient != null) {
             mWebSocketClient!!.disconnect()
             mWebSocketClient = null
         }
-
-        this.currentUri = null
     }
 
     private fun sendMessageReceivedEvent(message: String) {
@@ -402,6 +424,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val ACTION_ALARM_TRIGGERED = "alarmTriggered"
         val ACTION_AUTOTHRESHOLD_UPDATED = "autothresholdUpdated"
 
+        val ACTION_DISABLE_ALARM = "disableAlarm"
+
         val NOTI_SERVICE_ID = 101
         val NOTI_ALARM_ID = 102
         val NOTIFICATION_CHANNEL_ID = "babyphone_notifications"
@@ -418,7 +442,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             return filter
         }
 
-        val CONNECTION_ERROR_PATTERN = longArrayOf(200, 200, 200, 200, 200, 200)
+        val CONNECTION_ERROR_PATTERN = longArrayOf(200, 200)
 
         private val TAG = ConnectionService::class.java.simpleName
     }
