@@ -33,11 +33,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     var service: ConnectionService? = null
 
-
     private var lastExitPrompt: Instant? = null
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+
+    private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
     enum class StreamMode(val suffix: String) {
         Audio("audio"),
@@ -51,6 +52,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i("connection-service", "connection service creating")
         setContentView(R.layout.activity_babyphone)
         setSupportActionBar(toolbar)
         AndroidThreeTen.init(this);
@@ -93,6 +95,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 //            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
         }
         val activity = this
+
+
+        val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
+        connecting.visibility = View.GONE
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
         connect.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -100,10 +106,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 Log.i("websocket", "connecting to " + hostInput.text.toString())
                 this.service?.connectToHost(hostInput.text.toString())
             } else {
-                this.service?.disconnect()
+                this.disconnect()
+                connecting.visibility = View.GONE
             }
         }
-
 
 
         val btnLights = this.findViewById<View>(R.id.btn_lights) as ImageButton
@@ -136,7 +142,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
         volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
             volumeSeek.isEnabled = !isChecked
-            activity.service?.autoVolumeLevel=isChecked
+            activity.service?.autoVolumeLevel = isChecked
         }
 
         val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
@@ -148,12 +154,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
         volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
-        activity.service?.autoVolumeLevel=volAlarmAuto.isChecked
-
-
-        val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
-        connecting.visibility = View.GONE
-
+        activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
 
         connectToServiceBroadcast()
         this.player?.initialize()
@@ -209,6 +210,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     override fun onServiceDisconnected(name: ComponentName?) {
         this.service = null
+        if (this.serviceBroadcastReceiver != null) {
+            Log.i("babyphone", "service disconnected, will unregister receiver")
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver)
+        }
     }
 
     companion object {
@@ -216,6 +221,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+
+        Log.i("babyphone", "service connected")
         this.service = (service as ConnectionService.ConnectionServiceBinder).service
 
         if (this.service == null) {
@@ -230,9 +237,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.setGraphThreshold(volumeSeek.progress)
 
         val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-        this.service!!.autoVolumeLevel=volAlarmAuto.isChecked
-
-
+        this.service!!.autoVolumeLevel = volAlarmAuto.isChecked
     }
 
     fun initVolumeHistory() {
@@ -258,15 +263,15 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
 
-        when(state){
+        when (state) {
             ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
-                    playerGroup.visibility= View.VISIBLE
+                    playerGroup.visibility = View.VISIBLE
                 }
             }
-            else ->{
+            else -> {
                 runOnUiThread {
-                    playerGroup.visibility= View.GONE
+                    playerGroup.visibility = View.GONE
                 }
             }
         }
@@ -289,7 +294,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
-                    connect.isChecked = false
                     connecting.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
@@ -301,36 +305,37 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     private fun connectToServiceBroadcast() {
         val activity = this
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-                object : BroadcastReceiver() {
-                    override fun onReceive(context: Context, intent: Intent) {
-                        when (intent.action) {
-                            ConnectionService.ConnectionState.findState(intent.action)?.action -> {
-                                setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!, true)
-                            }
-                            ConnectionService.ACTION_VOLUME_RECEIVED -> {
-                                val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?
-                                if (vol == null) {
-                                    Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
-                                    return
-                                }
-                                activity.addVolumeToGraph(vol)
-                            }
-                            ConnectionService.ACTION_ALARM_TRIGGERED -> {
-                                activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
-                            }
-                            ConnectionService.ACTION_AUTOTHRESHOLD_UPDATED ->{
-                                val volume = intent.getIntExtra(ConnectionService.ACTION_EXTRA_VOLUME, 50)
-                                setGraphThreshold(volume)
-                                val volumeSeek = activity.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-                                volumeSeek.progress = volume
-                            }
-                            else -> {
-                                Log.w("websocket", "unhandled action in intent:" + intent.action)
-                            }
-                        }
+        this.serviceBroadcastReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    ConnectionService.ConnectionState.findState(intent.action)?.action -> {
+                        setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
                     }
-                },
+                    ConnectionService.ACTION_VOLUME_RECEIVED -> {
+                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?
+                        if (vol == null) {
+                            Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
+                            return
+                        }
+                        activity.addVolumeToGraph(vol)
+                    }
+                    ConnectionService.ACTION_ALARM_TRIGGERED -> {
+                        activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
+                    }
+                    ConnectionService.ACTION_AUTOTHRESHOLD_UPDATED -> {
+                        val volume = intent.getIntExtra(ConnectionService.ACTION_EXTRA_VOLUME, 50)
+                        setGraphThreshold(volume)
+                        val volumeSeek = activity.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+                        volumeSeek.progress = volume
+                    }
+                    else -> {
+                        Log.w("websocket", "unhandled action in intent:" + intent.action)
+                    }
+                }
+            }
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+                this.serviceBroadcastReceiver,
                 ConnectionService.createActionIntentFilter()
         )
     }
@@ -392,14 +397,21 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.lastExitPrompt = Instant.now()
                 return
             }
+            this.disconnect()
+            this.unbindService(this)
             this.stopService(Intent(this, ConnectionService::class.java))
             this.finish()
         }
     }
 
+    private fun disconnect() {
+        this.service?.disconnect()
+    }
+
     override fun onDestroy() {
+        Log.i("connection-service", "connection service onDestroy")
         this.player?.destroy()
-        this.unbindService(this)
+        this.disconnect()
         super.onDestroy()
     }
 
