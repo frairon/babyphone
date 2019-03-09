@@ -1,7 +1,9 @@
 import asyncio
 import io
 import logging
+import math
 import time
+from datetime import datetime
 
 import cv2
 import numpy as np
@@ -42,8 +44,8 @@ class MotionDetect(object):
                     cam.iso = 800
                     cam.contrast = 90
                     cam.awb_mode = 'off'
-                    cam.awb_gains = (1,1)
-                    cam.exposure_mode='night'
+                    cam.awb_gains = (1, 1)
+                    cam.exposure_mode = 'night'
                     self._bp.setLights(True)
                     yield from asyncio.sleep(0.1)
                 cam.capture(stream, format='jpeg')
@@ -53,8 +55,6 @@ class MotionDetect(object):
             data = np.fromstring(stream.getvalue(), dtype=np.uint8)
             # "Decode" the image from the array, preserving color
             image = cv2.cvtColor(cv2.imdecode(data, 1), cv2.COLOR_BGR2GRAY)
-            # write the image
-            cv2.imwrite("/home/pi/%d.png" % time.time(), image)
 
             self.log.info("Took picture")
             return image
@@ -62,13 +62,9 @@ class MotionDetect(object):
             self.log.info("Error taking picture: %s", e)
 
     @asyncio.coroutine
-    def _comparePictures(self, img1, img2):
-
-        self.log.info("comparing pictures...")
-        start = time.time()
-        # s = np.sum(np.absolute(img1-img2))
-        s = compare_ssim(img1, img2)
-        self.log.info("image sim (took %.2fs): %f" % (time.time() - start, s))
+    def _calcMovement(self, img1, img2):
+        s = 1.0 - compare_ssim(img1, img2)
+        return s
 
     @asyncio.coroutine
     def _run(self):
@@ -76,7 +72,12 @@ class MotionDetect(object):
 
         nightMode = False
 
+        diffValues = []
+        maxVals = 20
+
+        counter = 0
         while True:
+            counter += 1
             self.log.info("Motion detect runner next loop")
             yield from asyncio.sleep(self._interval)
 
@@ -106,7 +107,30 @@ class MotionDetect(object):
                     continue
 
                 if oldPicture is not None:
-                    yield from self._comparePictures(oldPicture, picture)
+                    movement = yield from self._calcMovement(oldPicture, picture)
+
+                    if len(diffValues) < maxVals:
+                        diffValues.append(movement)
+                    else:
+                        diffValues[counter % maxVals] = movement
+
+                    avg = sum(diffValues) / float(len(diffValues))
+                    stddev = math.sqrt(
+                        sum(map(lambda x: pow(abs(x - avg), 2), diffValues)) / float(len(diffValues)))
+                    if abs(movement - avg) > 2 * stddev:
+                        self.log.info("seems to have moved, take picture")
+                        cv2.putText(picture, datetime.now().strftime("%c"),
+                                    (3, 177),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.3,
+                                    (255, 255, 255),
+                                    lineType=cv2.LINE_AA)
+                        cv2.imwrite("/home/pi/%d.png" % time.time(), picture)
+
+                    self._bp.broadcast({
+                        "action": 'movement',
+                        'value': movement,
+                    })
 
                 oldPicture = picture
             except Exception as e:
@@ -116,7 +140,6 @@ class MotionDetect(object):
 
     def _imageBrightness(self, img):
         hist = cv2.calcHist([img], [0], None, [10], [0, 256])
-        self.log.info("hist: %s", str(hist))
         if float(hist[0]) / float(img.size) > 0.99:
             return -1
 
