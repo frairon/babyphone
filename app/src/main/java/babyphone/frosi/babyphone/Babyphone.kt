@@ -120,6 +120,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         btnShutdown.isEnabled = false
         btnShutdown.setOnClickListener {
+            // disconnect before shutting down to avoid getting
+            // the disconnected-notification
+            connect.isChecked = false
             this.service?.shutdown()
         }
 
