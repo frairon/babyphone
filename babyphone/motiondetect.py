@@ -1,10 +1,11 @@
-import asyncio
 import io
 import logging
 import math
 import time
 from datetime import datetime
+import base64
 
+import asyncio
 import cv2
 import numpy as np
 import picamera
@@ -48,6 +49,9 @@ class MotionDetect(object):
                     cam.exposure_mode = 'night'
                     self._bp.setLights(True)
                     yield from asyncio.sleep(0.1)
+                else:
+                    cam.awb_mode = 'off'
+
                 cam.capture(stream, format='jpeg')
                 if nightMode:
                     self._bp.setLights(False)
@@ -91,10 +95,15 @@ class MotionDetect(object):
                 self._takingPicture = True
                 picture = yield from self._takePicture(nightMode)
 
+                # taking picture failed for some reason
+                if picture is None:
+                    continue
+
                 # analyse the image brightness
                 brightness = self._imageBrightness(picture)
 
-                # it seems to be too dark or too bright, let's try different mode next time
+                # it seems to be too dark or too bright, let's try different
+                # mode next time
                 if brightness == -1:
                     nightMode = True
                     self.log.info(
@@ -117,6 +126,7 @@ class MotionDetect(object):
                     avg = sum(diffValues) / float(len(diffValues))
                     stddev = math.sqrt(
                         sum(map(lambda x: pow(abs(x - avg), 2), diffValues)) / float(len(diffValues)))
+
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
                         cv2.putText(picture, datetime.now().strftime("%c"),
@@ -127,9 +137,13 @@ class MotionDetect(object):
                                     lineType=cv2.LINE_AA)
                         cv2.imwrite("/home/pi/%d.png" % time.time(), picture)
 
-                    self._bp.broadcast({
+                    # _, payload = cv2.imencode(".png", picture)
+                    # payload = base64.b64encode(payload.tobytes()).decode('utf-8')
+
+                    yield from self._bp.broadcast({
                         "action": 'movement',
                         'value': movement,
+                        # 'image': payload,
                     })
 
                 oldPicture = picture
