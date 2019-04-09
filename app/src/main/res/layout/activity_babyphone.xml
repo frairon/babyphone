@@ -7,6 +7,7 @@
     tools:context=".Babyphone">
 
     <android.support.v4.widget.NestedScrollView
+        android:id="@+id/nestedScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
@@ -17,76 +18,13 @@
             tools:context=".BabyphoneContent"
             tools:showIn="@layout/activity_babyphone">
 
-            <android.support.constraint.Group
-                android:id="@+id/player_group"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:visibility="visible"
-                app:constraint_referenced_ids="surface_video,button_audio,button_video,button_stop,btn_lights" />
-
-            <babyphone.frosi.babyphone.GStreamerSurfaceView
-                android:id="@+id/surface_video"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_gravity="center_vertical|center_horizontal"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="32dp"
-                android:layout_marginLeft="32dp"
-                android:layout_marginRight="32dp"
-                android:layout_marginStart="32dp"
-                android:layout_marginTop="8dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/vol_alarm_seeker" />
-
-            <ImageButton
-                android:id="@+id/button_audio"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:contentDescription="@string/button_play"
-                android:src="@drawable/ic_headset_black_24dp"
-                android:text="@string/button_play"
-                app:layout_constraintBottom_toBottomOf="@+id/surface_video"
-                app:layout_constraintEnd_toEndOf="@+id/surface_video"
-                app:layout_constraintHorizontal_bias="0.0"
-                app:layout_constraintStart_toEndOf="@+id/button_video"
-                app:layout_constraintTop_toTopOf="@+id/surface_video"
-                app:layout_constraintVertical_bias="1.0" />
-
-            <ImageButton
-                android:id="@+id/button_stop"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:contentDescription="@string/button_stop"
-                android:src="@drawable/ic_stop_black_24dp"
-                android:text="@string/button_stop"
-                app:layout_constraintBottom_toBottomOf="@+id/surface_video"
-                app:layout_constraintEnd_toEndOf="@+id/surface_video"
-                app:layout_constraintHorizontal_bias="0.0"
-                app:layout_constraintStart_toEndOf="@+id/button_audio"
-                app:layout_constraintTop_toTopOf="@+id/surface_video"
-                app:layout_constraintVertical_bias="1.0" />
-
 
             <MultiAutoCompleteTextView
                 android:id="@+id/text_host"
                 android:layout_width="175dp"
                 android:layout_height="45dp"
-                android:layout_marginLeft="8dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
                 android:layout_marginTop="64dp"
                 android:text="babyphone.fritz.box"
                 app:layout_constraintStart_toStartOf="parent"
@@ -96,8 +34,8 @@
                 android:id="@+id/switch_connection"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="16dp"
                 android:layout_marginStart="16dp"
+                android:layout_marginLeft="16dp"
                 android:layout_marginTop="8dp"
                 android:checked="false"
                 android:text="@string/switchConnect_Disconnected"
@@ -122,11 +60,11 @@
                 android:id="@+id/button_shutdown"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
                 android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
                 android:src="@drawable/ic_power_black_24dp"
                 app:layout_constraintBottom_toBottomOf="@+id/switch_connection"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -138,10 +76,10 @@
                 android:id="@+id/spinner_connecting"
                 android:layout_width="wrap_content"
                 android:layout_height="0dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
                 app:layout_constraintBottom_toBottomOf="@+id/switch_connection"
                 app:layout_constraintEnd_toStartOf="@+id/button_shutdown"
                 app:layout_constraintHorizontal_bias="0.0"
@@ -150,28 +88,15 @@
                 app:layout_constraintVertical_bias="0.724" />
 
             <TextView
-                android:id="@+id/textview_message"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
-                android:layout_marginStart="8dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent" />
-
-            <TextView
                 android:id="@+id/textView2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
                 android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginBottom="8dp"
                 android:text="Host"
                 app:layout_constraintBottom_toBottomOf="@+id/text_host"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -191,43 +116,10 @@
                 android:max="100"
                 android:progress="50"
                 android:thumb="@drawable/ic_volume_down_black_24dp"
-                app:layout_constraintBottom_toTopOf="@+id/surface_video"
+                app:layout_constraintBottom_toTopOf="@+id/viewPager"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/vol_alarm_enabled" />
-
-            <ImageButton
-                android:id="@+id/button_video"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:src="@drawable/ic_videocam_black_24dp"
-                app:layout_constraintBottom_toBottomOf="@+id/surface_video"
-                app:layout_constraintEnd_toEndOf="@+id/surface_video"
-                app:layout_constraintHorizontal_bias="0.0"
-                app:layout_constraintStart_toStartOf="@+id/surface_video"
-                app:layout_constraintTop_toTopOf="@+id/surface_video"
-                app:layout_constraintVertical_bias="1.0" />
-
-            <ImageButton
-                android:id="@+id/btn_lights"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp"
-                android:layout_marginStart="8dp"
-                app:layout_constraintBottom_toBottomOf="@+id/surface_video"
-                app:layout_constraintEnd_toEndOf="@+id/surface_video"
-                app:layout_constraintHorizontal_bias="1.0"
-                app:layout_constraintStart_toEndOf="@+id/button_stop"
-                android:src="@drawable/ic_lightbulb_outline_black_24dp" />
 
             <Switch
                 android:id="@+id/vol_alarm_enabled"
@@ -252,6 +144,37 @@
                 app:layout_constraintHorizontal_bias="1.0"
                 app:layout_constraintStart_toEndOf="@+id/vol_alarm_enabled"
                 app:layout_constraintTop_toTopOf="@+id/vol_alarm_enabled" />
+
+            <android.support.v4.view.ViewPager
+                android:id="@+id/viewPager"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginBottom="8dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/vol_alarm_seeker" />
+
+            <ImageButton
+                android:id="@+id/btnVideo"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
+                app:layout_constraintBottom_toBottomOf="@+id/viewPager"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="1.0"
+                app:layout_constraintStart_toStartOf="@+id/viewPager"
+                app:layout_constraintTop_toTopOf="@+id/viewPager"
+                app:layout_constraintVertical_bias="0.0"
+                android:src="@drawable/ic_videocam_black_24dp" />
 
         </android.support.constraint.ConstraintLayout>
     </android.support.v4.widget.NestedScrollView>

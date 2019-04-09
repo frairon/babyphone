@@ -183,6 +183,9 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         this.currentUri = ""
         this.stopForeground(true)
         stopSocket()
+
+        Log.i(TAG, "removing notification")
+        NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
     }
 
     private fun shouldConnect(): Boolean {
@@ -411,6 +414,9 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             mWebSocketClient!!.disconnect()
             mWebSocketClient = null
         }
+
+        connectionState = ConnectionState.Disconnected
+        NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
     }
 
     private fun sendMessageReceivedEvent(message: String) {

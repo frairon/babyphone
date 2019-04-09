@@ -4,7 +4,7 @@ import android.util.Log
 import android.view.SurfaceHolder
 import org.freedesktop.gstreamer.GStreamer
 
-class Player(private val ctx: Babyphone) : SurfaceHolder.Callback {
+class Player(private val ctx: Video) : SurfaceHolder.Callback {
     private external fun nativeInit()      // Initialize native code, build pipeline, etc
     private external fun nativePlay()      // Set pipeline to PLAYING
     private external fun nativePause()     // Set pipeline to PAUSED
