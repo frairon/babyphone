@@ -222,12 +222,13 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-
+        val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
         when (state) {
             ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
+                    btnVideo.visibility = View.GONE
                     connect.text = getString(R.string.switchConnect_Connecting)
                     if (setButton) connect.isChecked = true
                 }
@@ -235,6 +236,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
+                    btnVideo.visibility = View.VISIBLE
                     btnShutdown.isEnabled = true
                     connect.text = getString(R.string.switchConnect_Connected)
                     if (setButton) connect.isChecked = true
@@ -243,6 +245,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
+                    btnVideo.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
                     if (setButton) connect.isChecked = false

@@ -45,7 +45,7 @@ class Player(private val ctx: Video) : SurfaceHolder.Callback {
     // Called from native code. This sets the content of the TextView from the UI thread.
     private fun setMessage(message: String) {
         Log.i("Gstreamer message", message)
-//        this.ctx.setMessage(message)
+        this.ctx.setMessage(message)
     }
 
     private fun onGStreamerInitialized() {

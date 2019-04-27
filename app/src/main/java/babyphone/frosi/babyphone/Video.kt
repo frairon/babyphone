@@ -21,11 +21,12 @@ class Video : AppCompatActivity(), ServiceConnection {
 
     var url: String? = null
 
+    var useLights: Boolean = false
+
     enum class StreamMode(val suffix: String) {
         Audio("audio"),
         AudioVideo("audiovideo")
     }
-
 
     var service: ConnectionService? = null
 
@@ -33,6 +34,7 @@ class Video : AppCompatActivity(), ServiceConnection {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i("Video", "onCreate called")
         setContentView(R.layout.activity_video)
         setSupportActionBar(toolbar)
 
@@ -43,7 +45,7 @@ class Video : AppCompatActivity(), ServiceConnection {
         } catch (e: Exception) {
             Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
             finish()
-            return
+            returnc
         }
 
         val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
@@ -52,37 +54,59 @@ class Video : AppCompatActivity(), ServiceConnection {
 
 
         val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
-        swtLights.setOnClickListener {
-            this.service?.toggleLights();
+        swtLights.setOnCheckedChangeListener { _, isChecked ->
+            this.service?.lights = isChecked
+            useLights = isChecked
         }
-//        val playAudio = this.findViewById<View>(R.id.button_audio) as ImageButton
-//        playAudio.setOnClickListener {
-//            this.player?.play(createUrl(Babyphone.StreamMode.Audio))
-//        }
-//        val playVideo = this.findViewById<View>(R.id.button_video) as ImageButton
-//        playVideo.setOnClickListener {
-//            this.player?.play(createUrl(Babyphone.StreamMode.AudioVideo))
-//        }
-//
-//        val pause = this.findViewById<View>(R.id.button_stop) as ImageButton
-//        pause.setOnClickListener {
-//            this.player?.pause()
-//        }
-
-        this.player?.play(createUrl(StreamMode.AudioVideo))
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-
         connectToServiceBroadcast()
-        this.player?.initialize()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+
+        val stateLights = savedInstanceState?.getBoolean("lights")
+        useLights = if (stateLights != null && stateLights == true) true else false
     }
+
+    override fun onPause() {
+        super.onPause()
+        Log.i("Video", "onPause called")
+        this.service?.lights = false
+        this.player?.pause()
+        this.player?.destroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.i("Video", "onResume called")
+        this.player?.initialize()
+
+        if (useLights != null) {
+            this.service?.lights = useLights
+        }
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle?) {
+        super.onRestoreInstanceState(savedInstanceState)
+        Log.i("video", "onrestoreinstancestate called")
+        if (useLights != null) {
+            this.service?.lights = useLights
+        }
+
+    }
+
+    override fun onSaveInstanceState(state: Bundle) {
+        Log.i("video", "onsaveinstancestate called")
+        val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
+        state.putBoolean("lights", swtLights.isChecked)
+        super.onSaveInstanceState(state)
+    }
+
 
     fun createUrl(streamMode: StreamMode): String {
-        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
         return "rtsp://" + this.url + ":8554/" + streamMode.suffix
     }
+
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
 
         Log.i("Video", "service connected")
@@ -90,6 +114,11 @@ class Video : AppCompatActivity(), ServiceConnection {
 
         if (this.service == null) {
             return
+        }
+
+        if (useLights == true) {
+            val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
+            swtLights.isChecked = true
         }
     }
 
@@ -105,7 +134,6 @@ class Video : AppCompatActivity(), ServiceConnection {
     }
 
     private fun connectToServiceBroadcast() {
-        val activity = this
         this.serviceBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
@@ -138,11 +166,12 @@ class Video : AppCompatActivity(), ServiceConnection {
     // the main loop is running, so it is ready to accept commands.
     fun onGStreamerInitialized() {
         Log.i("GStreamer", "GStreamer initialized:")
+        this.player?.play(createUrl(StreamMode.AudioVideo))
     }
 
     override fun onDestroy() {
         Log.i("connection-service", "connection service onDestroy")
-        this.player?.destroy()
+        this.unbindService(this)
         super.onDestroy()
     }
 

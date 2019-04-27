@@ -114,6 +114,12 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     var handler = Handler()
 
     var lights: Boolean = false
+    set(value){
+        field = value
+        val data = JSONObject();
+        data.put("action", if(value) "lightson" else "lightsoff");
+        this.mWebSocketClient?.send(data.toString())
+    }
 
     var alarmsEnabled: Boolean = true
 
@@ -433,15 +439,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     fun toggleLights() {
-        val data = JSONObject();
-        if (lights) {
-            data.put("action", "lightsoff");
-            lights = false
-        } else {
-            data.put("action", "lightson");
-            lights = true
-        }
-        this.mWebSocketClient?.send(data.toString())
+        lights = !lights
     }
 
     inner class ConnectionServiceBinder : Binder() {
