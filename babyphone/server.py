@@ -40,6 +40,24 @@ def writeStats():
         yield from asyncio.sleep(10)
 
 
+@asyncio.coroutine
+def runWebserver(bp):
+    from aiohttp import web
+
+    logging.info("starting application server")
+    def latest(request):
+        return web.Response(text="hello world")
+
+    app = web.Application()
+    app.add_routes([web.get('/latest', latest)])
+
+    runner = web.AppRunner(app)
+    logging.info("setup runner")
+    yield from runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8081)
+    logging.info("starting site")
+    yield from site.start()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Babyphone")
     parser.add_argument("--write-stats", dest="writeStats",
@@ -50,5 +68,7 @@ if __name__ == '__main__':
     if args.writeStats:
         asyncio.ensure_future(writeStats())
     loop.add_signal_handler(signal.SIGINT, signalStop)
+    logging.info("starting websockets server")
     loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
+    loop.run_until_complete(runWebserver(bp))
     loop.run_forever()

@@ -191,7 +191,7 @@ class Connection(object):
             log.info(
                 "done message done loop. Will disconnect now, if we didn't do already")
         except websockets.exceptions.ConnectionClosed as e:
-            log.info("websocket cosed. terminating connection")
+            log.info("websocket closed. terminating connection")
         finally:
             yield from self.disconnect()
 

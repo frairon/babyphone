@@ -40,6 +40,7 @@ setup(
         'websockets',
         'psutil',
         'RPi.GPIO',
+        'aiohttp',
         # 'opencv-python',
         ],
 )

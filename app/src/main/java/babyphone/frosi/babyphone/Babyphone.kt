@@ -29,7 +29,6 @@ import java.util.*
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
 
-    var player: Player? = null
 
     var service: ConnectionService? = null
 
@@ -37,18 +36,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+    private var useLights: Boolean = false
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
-
-    enum class StreamMode(val suffix: String) {
-        Audio("audio"),
-        AudioVideo("audiovideo")
-    }
-
-    fun createUrl(streamMode: StreamMode): String {
-        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-        return "rtsp://" + hostInput.text.toString() + ":8554/" + streamMode.suffix
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,13 +47,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         setSupportActionBar(toolbar)
         AndroidThreeTen.init(this);
 
-        try {
-            this.player = Player(this)
-        } catch (e: Exception) {
-            Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
 
         initVolumeGraph()
 
@@ -72,30 +55,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             throw RuntimeException("Could not start connection service. does not exist")
         }
 
-        val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
-        val sh = sv.holder
-        sh.addCallback(this.player)
-
-//        this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
-
-        val playAudio = this.findViewById<View>(R.id.button_audio) as ImageButton
-        playAudio.setOnClickListener {
-            this.player?.play(createUrl(StreamMode.Audio))
-//            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
-        }
-        val playVideo = this.findViewById<View>(R.id.button_video) as ImageButton
-        playVideo.setOnClickListener {
-            this.player?.play(createUrl(StreamMode.AudioVideo))
-//            this.findViewById<View>(R.id.surface_video).visibility = View.VISIBLE
-        }
-
-        val pause = this.findViewById<View>(R.id.button_stop) as ImageButton
-        pause.setOnClickListener {
-            this.player?.pause()
-//            this.findViewById<View>(R.id.surface_video).visibility = View.INVISIBLE
-        }
         val activity = this
-
 
         val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         connecting.visibility = View.GONE
@@ -111,10 +71,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         }
 
-
-        val btnLights = this.findViewById<View>(R.id.btn_lights) as ImageButton
-        btnLights.setOnClickListener {
-            this.service?.toggleLights();
+        val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
+        btnVideo.setOnClickListener {
+            val hostInput = this.findViewById<View>(R.id.text_host) as TextView
+            this.startActivityForResult(Intent(this, Video::class.java)
+                    .putExtra("url", hostInput.text.toString())
+                    .putExtra("lights", useLights), VIDEO_ACTIVITY_REQ_CODE)
         }
 
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
@@ -160,9 +122,20 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
 
         connectToServiceBroadcast()
-        this.player?.initialize()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
 
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        when (requestCode) {
+            VIDEO_ACTIVITY_REQ_CODE -> {
+                if (data != null) {
+                    useLights = data.getBooleanExtra("lights", false)
+                }
+            }
+        }
     }
 
     fun setVolumeThresholdIcon() {
@@ -221,6 +194,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     companion object {
         val MAX_GRAPH_ELEMENTS = 120
+        val VIDEO_ACTIVITY_REQ_CODE = 1
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -262,27 +236,15 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
-        val playerGroup = this.findViewById<View>(R.id.player_group) as Group
         val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
         val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-
-        when (state) {
-            ConnectionService.ConnectionState.Connected -> {
-                runOnUiThread {
-                    playerGroup.visibility = View.VISIBLE
-                }
-            }
-            else -> {
-                runOnUiThread {
-                    playerGroup.visibility = View.GONE
-                }
-            }
-        }
+        val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
         when (state) {
             ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
+                    btnVideo.visibility = View.GONE
                     connect.text = getString(R.string.switchConnect_Connecting)
                     if (setButton) connect.isChecked = true
                 }
@@ -290,6 +252,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
+                    btnVideo.visibility = View.VISIBLE
                     btnShutdown.isEnabled = true
                     connect.text = getString(R.string.switchConnect_Connected)
                     if (setButton) connect.isChecked = true
@@ -298,6 +261,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
+                    btnVideo.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
                     if (setButton) connect.isChecked = false
@@ -364,17 +328,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         runOnUiThread { gsv.requestLayout() }
     }
 
-    // Called from native code. This sets the content of the TextView from the UI thread.
-    fun setMessage(message: String) {
-        val tv = this.findViewById<View>(R.id.textview_message) as TextView
-        runOnUiThread { tv.text = message }
-    }
-
-    // Called from native code. Native code calls this once it has created its pipeline and
-    // the main loop is running, so it is ready to accept commands.
-    fun onGStreamerInitialized() {
-        Log.i("GStreamer", "GStreamer initialized:")
-    }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -412,8 +365,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     override fun onDestroy() {
-        Log.i("connection-service", "connection service onDestroy")
-        this.player?.destroy()
+        Log.i("babyphone", "babyphone on destroy")
         this.disconnect()
         super.onDestroy()
     }

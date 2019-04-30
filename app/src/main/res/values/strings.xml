@@ -12,4 +12,6 @@
     <string name="switchConnect_Disconnected">Disconnected</string>
     <string name="switchConnect_Connecting">Connecting</string>
     <string name="switchConnect_Connected">Connected</string>
+    <string name="title_activity_video">Video</string>
+    <string name="lights">Lights</string>
 </resources>
