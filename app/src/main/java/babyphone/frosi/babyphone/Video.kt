@@ -1,5 +1,6 @@
 package babyphone.frosi.babyphone
 
+import android.app.Activity
 import android.content.*
 import android.os.Bundle
 import android.os.IBinder
@@ -22,6 +23,10 @@ class Video : AppCompatActivity(), ServiceConnection {
     var url: String? = null
 
     var useLights: Boolean = false
+    set(value){
+        field = value
+        setResult(Activity.RESULT_OK, Intent().putExtra("lights", value))
+    }
 
     enum class StreamMode(val suffix: String) {
         Audio("audio"),
@@ -45,7 +50,7 @@ class Video : AppCompatActivity(), ServiceConnection {
         } catch (e: Exception) {
             Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
             finish()
-            returnc
+            return
         }
 
         val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
@@ -59,13 +64,16 @@ class Video : AppCompatActivity(), ServiceConnection {
             useLights = isChecked
         }
 
+        if (intent.getBooleanExtra("lights", false)
+                || savedInstanceState?.getBoolean("lights") == true) {
+            useLights = true
+            service?.lights = useLights
+        }
+
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
-
-        val stateLights = savedInstanceState?.getBoolean("lights")
-        useLights = if (stateLights != null && stateLights == true) true else false
     }
 
     override fun onPause() {
@@ -81,24 +89,22 @@ class Video : AppCompatActivity(), ServiceConnection {
         Log.i("Video", "onResume called")
         this.player?.initialize()
 
-        if (useLights != null) {
-            this.service?.lights = useLights
-        }
+        this.service?.lights = useLights
     }
 
-    override fun onRestoreInstanceState(savedInstanceState: Bundle?) {
-        super.onRestoreInstanceState(savedInstanceState)
+    override fun onRestoreInstanceState(state: Bundle?) {
+        super.onRestoreInstanceState(state)
         Log.i("video", "onrestoreinstancestate called")
-        if (useLights != null) {
-            this.service?.lights = useLights
+        if (state == null){
+            return
         }
-
+        useLights = state.getBoolean("lights", false)
+        this.service?.lights = useLights
     }
 
     override fun onSaveInstanceState(state: Bundle) {
         Log.i("video", "onsaveinstancestate called")
-        val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
-        state.putBoolean("lights", swtLights.isChecked)
+        state.putBoolean("lights", useLights)
         super.onSaveInstanceState(state)
     }
 
@@ -116,9 +122,10 @@ class Video : AppCompatActivity(), ServiceConnection {
             return
         }
 
-        if (useLights == true) {
+        if (useLights) {
             val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
             swtLights.isChecked = true
+            this.service?.lights = useLights
         }
     }
 

@@ -36,6 +36,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+    private var useLights: Boolean = false
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
@@ -73,7 +74,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
         btnVideo.setOnClickListener {
             val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-            this.startActivity(Intent(this, Video::class.java).putExtra("url", hostInput.text.toString()))
+            this.startActivityForResult(Intent(this, Video::class.java)
+                    .putExtra("url", hostInput.text.toString())
+                    .putExtra("lights", useLights), VIDEO_ACTIVITY_REQ_CODE)
         }
 
         val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
@@ -121,6 +124,18 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
 
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        when (requestCode) {
+            VIDEO_ACTIVITY_REQ_CODE -> {
+                if (data != null) {
+                    useLights = data.getBooleanExtra("lights", false)
+                }
+            }
+        }
     }
 
     fun setVolumeThresholdIcon() {
@@ -179,6 +194,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     companion object {
         val MAX_GRAPH_ELEMENTS = 120
+        val VIDEO_ACTIVITY_REQ_CODE = 1
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
