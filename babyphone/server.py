@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 import argparse
-from datetime import datetime
 import logging
 import signal
 import sys
+from datetime import datetime
 
 import asyncio
-from babyphone import babyphone
 import websockets
+from babyphone import babyphone
 
 loop = asyncio.get_event_loop()
 
@@ -45,8 +45,12 @@ def runWebserver(bp):
     from aiohttp import web
 
     logging.info("starting application server")
+
     def latest(request):
-        return web.Response(text="hello world")
+        return web.Response(
+            body=bp.getLastPictureAsBytes(),
+            content_type='image/png',
+        )
 
     app = web.Application()
     app.add_routes([web.get('/latest', latest)])

@@ -1,9 +1,9 @@
+import base64
 import io
 import logging
 import math
 import time
 from datetime import datetime
-import base64
 
 import asyncio
 import cv2
@@ -20,6 +20,8 @@ class MotionDetect(object):
         self._runner = None
         self._bp = babyphone
         self.log = logging.getLogger("babyphone")
+
+        self.lastPicture = None
 
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
@@ -51,6 +53,9 @@ class MotionDetect(object):
                     yield from asyncio.sleep(0.1)
                 else:
                     cam.awb_mode = 'off'
+                    cam.brightness = 90
+                    cam.awb_gains = (1, 1)
+                    cam.contrast = 90
 
                 cam.capture(stream, format='jpeg')
                 if nightMode:
@@ -108,11 +113,15 @@ class MotionDetect(object):
                     nightMode = True
                     self.log.info(
                         "Image is too dark, will try in night mode next time")
+                    cv2.imwrite("/home/pi/toodark-%d.png" %
+                                time.time(), picture)
                     continue
                 if brightness == 1:
                     nightMode = False
                     self.log.info(
                         "Image is too bright, will try in day mode next time")
+                    cv2.imwrite("/home/pi/toobright-%d.png" %
+                                time.time(), picture)
                     continue
 
                 if oldPicture is not None:
@@ -127,6 +136,7 @@ class MotionDetect(object):
                     stddev = math.sqrt(
                         sum(map(lambda x: pow(abs(x - avg), 2), diffValues)) / float(len(diffValues)))
 
+                    moved = False
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
                         cv2.putText(picture, datetime.now().strftime("%c"),
@@ -136,17 +146,21 @@ class MotionDetect(object):
                                     (255, 255, 255),
                                     lineType=cv2.LINE_AA)
                         cv2.imwrite("/home/pi/%d.png" % time.time(), picture)
+                        moved = True
 
-                    # _, payload = cv2.imencode(".png", picture)
-                    # payload = base64.b64encode(payload.tobytes()).decode('utf-8')
+                        self._interval = 5
+                    else:
+                        self._interval = 20
 
                     yield from self._bp.broadcast({
                         "action": 'movement',
                         'value': movement,
-                        # 'image': payload,
+                        'moved': moved,
                     })
 
                 oldPicture = picture
+
+                self.lastPicture = picture
             except Exception as e:
                 self.log.info("Error taking picture: %s. Trying next time", e)
             finally:

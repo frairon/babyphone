@@ -36,6 +36,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+    private var movementSeries = PointsGraphSeries<DataPoint>()
     private var useLights: Boolean = false
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
@@ -161,9 +162,14 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         graph.addSeries(this.volumeSeries)
         graph.addSeries(this.thresholdSeries)
         graph.addSeries(this.alarmSeries)
+        graph.addSeries(this.movementSeries)
 
         this.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
         this.alarmSeries.color = Color.MAGENTA
+
+        this.movementSeries.shape = PointsGraphSeries.Shape.POINT
+        this.movementSeries.color = Color.DKGRAY
+        this.movementSeries.size = 5F
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
         this.volumeSeries.thickness = 4
@@ -228,6 +234,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
         this.volumeSeries.resetData(dataPoints.toTypedArray())
 
+        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
+        this.movementSeries.resetData(movementPoints.toTypedArray())
+
         val graph = this.findViewById(R.id.graph_volume) as GraphView?
 
         graph?.viewport?.setMinX(volumeSeries.lowestValueX)
@@ -279,12 +288,20 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                         setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
                     }
                     ConnectionService.ACTION_VOLUME_RECEIVED -> {
-                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?
+                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Point?
                         if (vol == null) {
                             Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
                             return
                         }
                         activity.addVolumeToGraph(vol)
+                    }
+                    ConnectionService.ACTION_MOVEMENT_RECEIVED -> {
+                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_MOVEMENT) as Point?
+                        if (vol == null) {
+                            Log.e("babyphone", "Receivd null movement in movement intent. Ignoring.")
+                            return
+                        }
+                        activity.addMovementToGraph(vol)
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {
                         activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
@@ -308,7 +325,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
 
-    fun addVolumeToGraph(vol: Volume) {
+    fun addVolumeToGraph(vol: Point) {
         val newPoint = DataPoint(vol.time, vol.volume.toDouble())
         runOnUiThread {
             volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
@@ -317,6 +334,14 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             graph.viewport.setMaxX(volumeSeries.highestValueX)
         }
     }
+
+    fun addMovementToGraph(vol: Point) {
+        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
+        runOnUiThread {
+            movementSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
+        }
+    }
+
 
     // Called from native code when the size of the media changes or is first detected.
     // Inform the video surface about the new size and recalculate the layout.

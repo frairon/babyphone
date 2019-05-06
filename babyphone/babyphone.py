@@ -12,6 +12,8 @@ import asyncio
 import RPi.GPIO as gpio
 from babyphone import motiondetect
 
+import cv2
+import numpy as np
 
 class InvalidMessageException(Exception):
     pass
@@ -158,6 +160,13 @@ class Babyphone(object):
     def setLights(self, on):
         log.info("turning lights %s", "on" if on else "off")
         gpio.output(self.LIGHTS_GPIO, bool(on))
+
+    def getLastPictureAsBytes(self):
+        lastPicture = self.motion.lastPicture
+        if lastPicture is None:
+            return None
+
+        return cv2.imencode(".png", lastPicture)[1].tostring()
 
 
 class Connection(object):
