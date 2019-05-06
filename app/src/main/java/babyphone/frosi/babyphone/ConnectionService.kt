@@ -111,7 +111,7 @@ class History(private val maxSize: Int) {
     }
 }
 
-class HeartbeatWatcher(var notifier: ((LongArray) -> Unit)) {
+class HeartbeatWatcher(private val notifier: ((LongArray) -> Unit)) {
 
     private var handler = Handler()
 
@@ -268,6 +268,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val data = JSONObject();
         data.put("action", "shutdown");
         this.mWebSocketClient?.send(data.toString())
+        this.disconnect()
     }
 
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {

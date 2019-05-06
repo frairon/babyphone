@@ -87,7 +87,6 @@ class MotionDetect(object):
         counter = 0
         while True:
             counter += 1
-            self.log.info("Motion detect runner next loop")
             yield from asyncio.sleep(self._interval)
 
             anyoneStreaming = yield from self._bp.isAnyoneStreaming()

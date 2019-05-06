@@ -85,8 +85,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         btnShutdown.setOnClickListener {
             // disconnect before shutting down to avoid getting
             // the disconnected-notification
-            connect.isChecked = false
             this.service?.shutdown()
+            connect.isChecked = false
         }
 
         val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
