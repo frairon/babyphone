@@ -2,19 +2,20 @@ package babyphone.frosi.babyphone
 
 import android.content.*
 import android.graphics.Color
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
-import android.support.constraint.Group
+import android.support.annotation.UiThread
+import android.support.annotation.WorkerThread
 import android.support.v4.content.ContextCompat
 import android.support.v4.content.LocalBroadcastManager
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.view.SurfaceView
 import android.view.View
 import android.widget.*
-import android.widget.CompoundButton
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
@@ -23,9 +24,10 @@ import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
 import kotlinx.android.synthetic.main.activity_babyphone.*
 import org.threeten.bp.Instant
+import java.io.InputStream
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
-
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
 
@@ -124,7 +126,33 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+    }
 
+    class TimedDrawable(val drawable: Drawable, val instant: Instant)
+
+    @WorkerThread
+    fun loadMotionImage(uri: String): TimedDrawable? {
+
+        try {
+            val url = URL(uri)
+            Log.d("babyphone", "loading image from " + uri)
+            val connection = url.openConnection()
+            val pictureTime = connection.getHeaderField("picture-time")
+            val inputStream = connection.getContent() as InputStream
+            Log.d("babyphone", "...success!")
+            return TimedDrawable(
+                    Drawable.createFromStream(inputStream, "src name"),
+                    Instant.ofEpochSecond(pictureTime.toLong())
+            )
+        } catch (e: Exception) {
+            Log.e("babyphone", "Error loading image", e)
+            return null
+        }
+    }
+
+    @UiThread
+    fun displayMotionImage(image: Drawable, instant: Instant) {
+        Log.i("babyphone", "Drawing drawable image")
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -281,6 +309,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     private fun connectToServiceBroadcast() {
         val activity = this
+
         this.serviceBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
@@ -301,7 +330,30 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                             Log.e("babyphone", "Receivd null movement in movement intent. Ignoring.")
                             return
                         }
+
                         activity.addMovementToGraph(vol)
+
+/*
+launch(imageLoader) {
+                            val uri = activity.service?.getMotionUrl()
+                            if (uri != null) {
+                                val timedImage = loadMotionImage(uri)
+                                if (timedImage != null) {
+                                    launch(UI) {
+                                        displayMotionImage(timedImage.drawable, timedImage.instant)
+                                    }
+                                }
+                            }
+                        }
+ */
+                        val uri = activity.service?.getMotionUrl()
+                        if (uri != null) {
+                            val timedImage = loadMotionImage(uri)
+                            if (timedImage != null) {
+                                displayMotionImage(timedImage.drawable, timedImage.instant)
+
+                            }
+                        }
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {
                         activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
@@ -344,7 +396,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
 
     // Called from native code when the size of the media changes or is first detected.
-    // Inform the video surface about the new size and recalculate the layout.
+// Inform the video surface about the new size and recalculate the layout.
     fun onMediaSizeChanged(width: Int, height: Int) {
         Log.i("GStreamer", "Media size changed to " + width + "x" + height)
         val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
@@ -378,9 +430,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.lastExitPrompt = Instant.now()
                 return
             }
-            this.disconnect()
-            this.unbindService(this)
-            this.stopService(Intent(this, ConnectionService::class.java))
             this.finish()
         }
     }
@@ -392,6 +441,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     override fun onDestroy() {
         Log.i("babyphone", "babyphone on destroy")
         this.disconnect()
+        this.unbindService(this)
+        this.stopService(Intent(this, ConnectionService::class.java))
         super.onDestroy()
     }
 

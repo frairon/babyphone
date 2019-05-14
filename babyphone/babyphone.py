@@ -168,6 +168,9 @@ class Babyphone(object):
 
         return cv2.imencode(".png", lastPicture)[1].tostring()
 
+    def getLastPictureTimestamp(self):
+        return self.motion.lastPictureTimestamp
+
 
 class Connection(object):
 

@@ -22,6 +22,7 @@ class MotionDetect(object):
         self.log = logging.getLogger("babyphone")
 
         self.lastPicture = None
+        self.lastPictureTimestamp = 0
 
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
@@ -37,8 +38,9 @@ class MotionDetect(object):
     def _takePicture(self, nightMode):
 
         try:
-            with picamera.PiCamera(resolution=(240, 180)) as cam:
-                yield from asyncio.sleep(1)
+            with picamera.PiCamera(resolution=(240, 240)) as cam:
+                yield from asyncio.sleep(0.5)
+                cam.rotation=90
                 # simulate to do something with the camera
                 stream = io.BytesIO()
                 # cam.color_effects = (128,128)
@@ -50,13 +52,14 @@ class MotionDetect(object):
                     cam.awb_gains = (1, 1)
                     cam.exposure_mode = 'night'
                     self._bp.setLights(True)
-                    yield from asyncio.sleep(0.1)
+
                 else:
                     cam.awb_mode = 'off'
-                    cam.brightness = 90
+                    # cam.brightness = 90
                     cam.awb_gains = (1, 1)
-                    cam.contrast = 90
+                    # cam.contrast = 90
 
+                yield from asyncio.sleep(1.0)
                 cam.capture(stream, format='jpeg')
                 if nightMode:
                     self._bp.setLights(False)
@@ -121,6 +124,7 @@ class MotionDetect(object):
                         "Image is too bright, will try in day mode next time")
                     cv2.imwrite("/home/pi/toobright-%d.png" %
                                 time.time(), picture)
+
                     continue
 
                 if oldPicture is not None:
@@ -138,13 +142,6 @@ class MotionDetect(object):
                     moved = False
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
-                        cv2.putText(picture, datetime.now().strftime("%c"),
-                                    (3, 177),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.3,
-                                    (255, 255, 255),
-                                    lineType=cv2.LINE_AA)
-                        cv2.imwrite("/home/pi/%d.png" % time.time(), picture)
                         moved = True
 
                         self._interval = 5
@@ -159,7 +156,21 @@ class MotionDetect(object):
 
                 oldPicture = picture
 
-                self.lastPicture = picture
+                # make a copy so we can modify it and save it
+                self.lastPicture = picture.copy()
+                self.lastPictureTimestamp = int(round(time.time(), 0))
+
+                # annotate with date and time
+                cv2.putText(self.lastPicture, datetime.now().strftime("%c"),
+                            (3, 237),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.3,
+                            (255, 255, 255),
+                            lineType=cv2.LINE_AA)
+
+                # save it to disk
+                cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
+
             except Exception as e:
                 self.log.info("Error taking picture: %s. Trying next time", e)
             finally:

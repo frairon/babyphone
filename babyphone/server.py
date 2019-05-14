@@ -50,6 +50,9 @@ def runWebserver(bp):
         return web.Response(
             body=bp.getLastPictureAsBytes(),
             content_type='image/png',
+            headers={
+                'picture-time': "%s" % bp.getLastPictureTimestamp(),
+            },
         )
 
     app = web.Application()

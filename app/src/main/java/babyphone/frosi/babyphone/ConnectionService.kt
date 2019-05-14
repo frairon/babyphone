@@ -162,7 +162,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private var heartbeat: HeartbeatWatcher = HeartbeatWatcher(::vibrate)
 
 
-    private var currentUri: String? = null
+    private var currentHost: String? = null
     var volumeThreshold: Int = 50
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
 
@@ -181,6 +181,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     var alarmsEnabled: Boolean = true
 
     var autoVolumeLevel: Boolean = false
+
+    fun getMotionUrl(): String {
+        return "http://$currentHost:8081/latest"
+    }
 
     var connectionState: ConnectionState = ConnectionState.Disconnected
         private set(value) {
@@ -233,8 +237,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     fun connectToHost(host: String) {
-        this.currentUri = "ws://$host:8080"
-        Log.i(TAG, "configuring websocket-uri ${this.currentUri}")
+        this.currentHost = host
+        Log.i(TAG, "configuring websocket-uri ${this.currentHost}")
 
         this.startForeground()
         this.heartbeat.start()
@@ -244,7 +248,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     fun disconnect() {
         Log.i(TAG, "service disconnect requested")
-        this.currentUri = ""
+        this.currentHost = ""
         this.stopForeground(true)
         stopSocket()
         this.heartbeat.stop()
@@ -254,7 +258,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     private fun shouldConnect(): Boolean {
-        return this.currentUri != ""
+        return this.currentHost != ""
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -315,7 +319,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "onDestroy")
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver)
         stopForeground(true)
-        currentUri = ""
+        currentHost = ""
         stopSocket()
         stopSelf()
         super.onDestroy()
@@ -385,12 +389,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         NotificationManagerCompat.from(this).notify(if (isAlarm) NOTI_ALARM_ID else NOTI_SERVICE_ID, notification)
     }
 
-//    private fun doAlarmVibrate() {
-//        val effect = VibrationEffect.createWaveform(arrayOf(900L, 100L, 900L, 100L, 1000L, 500L).toLongArray(), arrayOf(120, 0, 200, 0, 255, 0).toIntArray(), 4)
-//        val vibrator = getSystemService(Vibrator::class.java) as Vibrator
-//        vibrator.vibrate(effect);
-//    }
-
     fun handleVolume(volume: Point) {
         if (!alarmsEnabled) {
             return
@@ -446,23 +444,24 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "Websocket onDisconnect()")
         Log.i(TAG, "Code: $code - Reason: $reason")
 
+        stopSocket()
 
         if (this.shouldConnect()) {
             Log.i(TAG, "got disconnected, will try to reconnect")
-            scheduleReconnect()
+            scheduleConnect(false)
         } else {
             Log.i(TAG, "removing notification")
             NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
         }
     }
 
-    private fun scheduleReconnect() {
+    private fun scheduleConnect(reconnect: Boolean = false) {
         if (reconnectScheduled) {
             // do not double schedule
             return
         }
         handler.postDelayed({
-            startSocket(true)
+            startSocket(reconnect)
         }, 3000)
         connectionState = ConnectionState.Connecting
         doNotify({ x -> this.addConnectionState(x) })
@@ -473,7 +472,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "onError ")
         if (this.shouldConnect()) {
             Log.e(TAG, "Websocket onError " + error.toString())
-            scheduleReconnect()
+            scheduleConnect(true)
         } else {
             Log.i(TAG, "removing notification")
             NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
@@ -482,7 +481,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     private fun startSocket(reconnect: Boolean = false) {
         Log.d(TAG, "startSocket")
-        if (this.currentUri == null) {
+        if (this.currentHost == null) {
             Log.i(TAG, "No host configured. Will not attempt to connect")
             return
         }
@@ -496,7 +495,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             }
         }
 
-        mWebSocketClient = WebSocketClient(URI.create(this.currentUri), this, null)
+
+        mWebSocketClient = WebSocketClient(URI.create("ws://$currentHost:8080"), this, null)
         mWebSocketClient!!.connect()
 
         connectionState = ConnectionState.Connecting
