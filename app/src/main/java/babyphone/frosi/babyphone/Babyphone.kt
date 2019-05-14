@@ -1,5 +1,8 @@
 package babyphone.frosi.babyphone
 
+import android.arch.lifecycle.Lifecycle
+import android.arch.lifecycle.LifecycleObserver
+import android.arch.lifecycle.OnLifecycleEvent
 import android.content.*
 import android.graphics.Color
 import android.graphics.drawable.Drawable
@@ -10,6 +13,7 @@ import android.support.annotation.UiThread
 import android.support.annotation.WorkerThread
 import android.support.v4.content.ContextCompat
 import android.support.v4.content.LocalBroadcastManager
+import android.support.v4.view.ViewPager
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
@@ -23,11 +27,31 @@ import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
 import kotlinx.android.synthetic.main.activity_babyphone.*
+import kotlinx.coroutines.*
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.CoroutineContext
+
+/**
+ * Coroutine context that automatically is cancelled when UI is destroyed
+ */
+class UiLifecycleScope : CoroutineScope, LifecycleObserver {
+
+    private lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = job + Dispatchers.Main
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_START)
+    fun onCreate() {
+        job = Job()
+    }
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+    fun destroy() = job.cancel()
+}
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
 
@@ -43,8 +67,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
+    private val loaderJob = Job()
+    private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
+
+    private val uiScope = UiLifecycleScope()
+
+    private val imagePager = ImagePager(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
         setContentView(R.layout.activity_babyphone)
         setSupportActionBar(toolbar)
@@ -119,6 +151,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
             this.service?.alarmsEnabled = isChecked
         }
+        val viewPager = this.findViewById<View>(R.id.imagePager) as ViewPager
+        viewPager.adapter = imagePager
 
         volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
         volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
@@ -152,7 +186,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     @UiThread
     fun displayMotionImage(image: Drawable, instant: Instant) {
-        Log.i("babyphone", "Drawing drawable image")
+        imagePager.addImage(image)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -333,24 +367,17 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
                         activity.addMovementToGraph(vol)
 
-/*
-launch(imageLoader) {
+                        loaderScope.launch {
                             val uri = activity.service?.getMotionUrl()
                             if (uri != null) {
                                 val timedImage = loadMotionImage(uri)
                                 if (timedImage != null) {
-                                    launch(UI) {
+                                    uiScope.launch {
                                         displayMotionImage(timedImage.drawable, timedImage.instant)
+                                        val viewPager = activity.findViewById<View>(R.id.imagePager) as ViewPager
+                                        viewPager.setCurrentItem(imagePager.count, true)
                                     }
                                 }
-                            }
-                        }
- */
-                        val uri = activity.service?.getMotionUrl()
-                        if (uri != null) {
-                            val timedImage = loadMotionImage(uri)
-                            if (timedImage != null) {
-                                displayMotionImage(timedImage.drawable, timedImage.instant)
 
                             }
                         }
