@@ -164,6 +164,23 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     class TimedDrawable(val drawable: Drawable, val instant: Instant)
 
+    fun loadAndShowImage() {
+        loaderScope.launch {
+            val uri = service?.getMotionUrl()
+            if (uri != null) {
+                val timedImage = loadMotionImage(uri)
+                if (timedImage != null) {
+                    uiScope.launch {
+                        displayMotionImage(timedImage.drawable, timedImage.instant)
+                        val viewPager = findViewById<View>(R.id.imagePager) as ViewPager
+                        viewPager.setCurrentItem(imagePager.count, true)
+                    }
+                }
+
+            }
+        }
+    }
+
     @WorkerThread
     fun loadMotionImage(uri: String): TimedDrawable? {
 
@@ -179,7 +196,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     Instant.ofEpochSecond(pictureTime.toLong())
             )
         } catch (e: Exception) {
-            Log.e("babyphone", "Error loading image", e)
+            Log.e("babyphone", "Error loading image " + e)
             return null
         }
     }
@@ -328,6 +345,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     connect.text = getString(R.string.switchConnect_Connected)
                     if (setButton) connect.isChecked = true
                 }
+
+                loadAndShowImage()
             }
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
@@ -367,19 +386,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
                         activity.addMovementToGraph(vol)
 
-                        loaderScope.launch {
-                            val uri = activity.service?.getMotionUrl()
-                            if (uri != null) {
-                                val timedImage = loadMotionImage(uri)
-                                if (timedImage != null) {
-                                    uiScope.launch {
-                                        displayMotionImage(timedImage.drawable, timedImage.instant)
-                                        val viewPager = activity.findViewById<View>(R.id.imagePager) as ViewPager
-                                        viewPager.setCurrentItem(imagePager.count, true)
-                                    }
-                                }
-
-                            }
+                        // only reload image if it actually moved
+                        if (imagePager.getCount() == 0 || intent.getBooleanExtra(ConnectionService.ACTION_EXTRA_MOVEMENT_MOVED, false)) {
+                            loadAndShowImage()
                         }
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {

@@ -182,7 +182,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     var autoVolumeLevel: Boolean = false
 
-    fun getMotionUrl(): String {
+    fun getMotionUrl(): String? {
+        if (currentHost == null) {
+            return null
+        }
         return "http://$currentHost:8081/latest"
     }
 
@@ -362,6 +365,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
                 history.addMovement(mov)
                 sendAction(ACTION_MOVEMENT_RECEIVED, { intent ->
                     intent.putExtra(ACTION_EXTRA_MOVEMENT, mov)
+                    intent.putExtra(ACTION_EXTRA_MOVEMENT_MOVED, parsed.optBoolean("moved"))
                 })
                 if (parsed.optBoolean("moved")) {
                     vibrate(arrayOf(0L, 150L).toLongArray())
@@ -542,6 +546,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val ACTION_EXTRA_VOLUME = "volume"
         val ACTION_MOVEMENT_RECEIVED = "movementReceived"
         val ACTION_EXTRA_MOVEMENT = "movement"
+        val ACTION_EXTRA_MOVEMENT_MOVED = "moved"
         val ACTION_MSG_RECEIVED = "msgReceived"
         val ACTION_NETWORK_STATE_CHANGED = "networkStateChanged"
         val ACTION_ALARM_TRIGGERED = "alarmTriggered"
