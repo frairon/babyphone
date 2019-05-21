@@ -183,7 +183,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     var autoVolumeLevel: Boolean = false
 
     fun getMotionUrl(): String? {
-        if (currentHost == null) {
+        if (currentHost == null || currentHost == "") {
             return null
         }
         return "http://$currentHost:8081/latest"

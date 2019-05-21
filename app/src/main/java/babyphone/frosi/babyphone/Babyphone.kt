@@ -171,11 +171,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 val timedImage = loadMotionImage(uri)
                 if (timedImage != null) {
                     uiScope.launch {
-                        displayMotionImage(timedImage.drawable, timedImage.instant)
+                        displayMotionImage(timedImage)
                         val viewPager = findViewById<View>(R.id.imagePager) as ViewPager
+                        Log.d("babyphone", "updating current view pager item to " + imagePager.count)
                         viewPager.setCurrentItem(imagePager.count, true)
                     }
-                }
+                    }
 
             }
         }
@@ -202,7 +203,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     @UiThread
-    fun displayMotionImage(image: Drawable, instant: Instant) {
+    fun displayMotionImage(image: TimedDrawable) {
+        Log.d("babyhpone", "displaying image")
         imagePager.addImage(image)
     }
 
@@ -386,10 +388,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
                         activity.addMovementToGraph(vol)
 
-                        // only reload image if it actually moved
-                        if (imagePager.getCount() == 0 || intent.getBooleanExtra(ConnectionService.ACTION_EXTRA_MOVEMENT_MOVED, false)) {
-                            loadAndShowImage()
-                        }
+                        loadAndShowImage()
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {
                         activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)

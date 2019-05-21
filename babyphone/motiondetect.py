@@ -38,7 +38,7 @@ class MotionDetect(object):
     def _takePicture(self, nightMode):
 
         try:
-            with picamera.PiCamera(resolution=(240, 240)) as cam:
+            with picamera.PiCamera(resolution=(320, 240)) as cam:
                 yield from asyncio.sleep(0.5)
                 cam.rotation=90
                 # simulate to do something with the camera
@@ -160,16 +160,16 @@ class MotionDetect(object):
                 self.lastPicture = picture.copy()
                 self.lastPictureTimestamp = int(round(time.time(), 0))
 
-                # annotate with date and time
-                cv2.putText(self.lastPicture, datetime.now().strftime("%c"),
-                            (3, 237),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.3,
-                            (255, 255, 255),
-                            lineType=cv2.LINE_AA)
-
-                # save it to disk
-                cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
+                # # annotate with date and time
+                # cv2.putText(self.lastPicture, datetime.now().strftime("%c"),
+                #             (3, 237),
+                #             cv2.FONT_HERSHEY_SIMPLEX,
+                #             0.3,
+                #             (255, 255, 255),
+                #             lineType=cv2.LINE_AA)
+                #
+                # # save it to disk
+                # cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
 
             except Exception as e:
                 self.log.info("Error taking picture: %s. Trying next time", e)
