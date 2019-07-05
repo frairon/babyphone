@@ -10,11 +10,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.*
 import android.provider.Settings
-import android.support.v4.app.NotificationCompat
-import android.support.v4.app.NotificationManagerCompat
-import android.support.v4.app.TaskStackBuilder
-import android.support.v4.content.LocalBroadcastManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.codebutler.android_websockets.WebSocketClient
 import org.json.JSONObject
 import org.threeten.bp.Duration

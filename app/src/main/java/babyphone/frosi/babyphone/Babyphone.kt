@@ -1,33 +1,34 @@
 package babyphone.frosi.babyphone
 
-import android.arch.lifecycle.Lifecycle
-import android.arch.lifecycle.LifecycleObserver
-import android.arch.lifecycle.OnLifecycleEvent
 import android.content.*
 import android.graphics.Color
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
-import android.support.annotation.UiThread
-import android.support.annotation.WorkerThread
-import android.support.v4.content.ContextCompat
-import android.support.v4.content.LocalBroadcastManager
-import android.support.v4.view.ViewPager
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.*
+import androidx.annotation.UiThread
+import androidx.annotation.WorkerThread
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleObserver
+import androidx.lifecycle.OnLifecycleEvent
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.viewpager.widget.ViewPager
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
-import kotlinx.android.synthetic.main.activity_babyphone.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
@@ -79,7 +80,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
         setContentView(R.layout.activity_babyphone)
-        setSupportActionBar(toolbar)
+        //setSupportActionBar(toolbar)
         AndroidThreeTen.init(this);
 
 
@@ -173,8 +174,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     uiScope.launch {
                         displayMotionImage(timedImage)
                         val viewPager = findViewById<View>(R.id.imagePager) as ViewPager
-                        Log.d("babyphone", "updating current view pager item to " + imagePager.count)
-                        viewPager.setCurrentItem(imagePager.count, true)
+                        Log.d("babyphone", "updating current view pager item to " + imagePager.getCount())
+                        viewPager.setCurrentItem(imagePager.getCount(), true)
                     }
                     }
 
@@ -275,7 +276,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.service = null
         if (this.serviceBroadcastReceiver != null) {
             Log.i("babyphone", "service disconnected, will unregister receiver")
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver)
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver!!)
         }
     }
 
@@ -334,7 +335,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
-                    btnVideo.visibility = View.GONE
+//                    btnVideo.visibility = View.GONE
                     connect.text = getString(R.string.switchConnect_Connecting)
                     if (setButton) connect.isChecked = true
                 }
@@ -353,7 +354,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
-                    btnVideo.visibility = View.GONE
+//                    btnVideo.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
                     if (setButton) connect.isChecked = false
@@ -406,7 +407,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         }
         LocalBroadcastManager.getInstance(this).registerReceiver(
-                this.serviceBroadcastReceiver,
+                this.serviceBroadcastReceiver!!,
                 ConnectionService.createActionIntentFilter()
         )
     }
@@ -433,11 +434,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     // Called from native code when the size of the media changes or is first detected.
 // Inform the video surface about the new size and recalculate the layout.
     fun onMediaSizeChanged(width: Int, height: Int) {
-        Log.i("GStreamer", "Media size changed to " + width + "x" + height)
-        val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
-        gsv.media_width = width
-        gsv.media_height = height
-        runOnUiThread { gsv.requestLayout() }
+//        Log.i("GStreamer", "Media size changed to " + width + "x" + height)
+//        val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
+//        gsv.media_width = width
+//        gsv.media_height = height
+//        runOnUiThread { gsv.requestLayout() }
     }
 
 

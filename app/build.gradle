@@ -5,35 +5,14 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
 
 android {
-    compileSdkVersion 26
+    compileSdkVersion 28
     defaultConfig {
         applicationId "babyphone.frosi.babyphone"
-        minSdkVersion 15
-        targetSdkVersion 26
+        minSdkVersion 16
+        targetSdkVersion 28
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-        externalNativeBuild {
-            ndkBuild {
-                def gstRoot
-
-                if (project.hasProperty('gstAndroidRoot'))
-                    gstRoot = project.gstAndroidRoot
-                else
-                    gstRoot = System.env.GSTREAMER_ROOT_ANDROID
-
-                if (gstRoot == null)
-                    throw new GradleException('GSTREAMER_ROOT_ANDROID must be set, or "gstAndroidRoot" must be defined in your gradle.properties in the top level directory of the unpacked universal GStreamer Android binaries')
-
-                arguments "NDK_APPLICATION_MK=src/main/cpp/Application.mk", "GSTREAMER_JAVA_SRC_DIR=src/main/java", "GSTREAMER_ROOT_ANDROID=$gstRoot", "GSTREAMER_ASSETS_DIR=src/assets"
-
-                targets "player"
-
-                // All archs except MIPS and MIPS64 are supported
-                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
-                // x86_64 abis disabled because of https://bugzilla.gnome.org/show_bug.cgi?id=795454
-            }
-        }
     }
     buildTypes {
         release {
@@ -41,28 +20,27 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    externalNativeBuild {
-        ndkBuild {
-            path 'src/main/cpp/Android.mk'
-        }
+
+    compileOptions {
+        targetCompatibility JavaVersion.VERSION_1_8
     }
+
 }
-
-
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'com.android.support:appcompat-v7:26.1.0'
+    implementation 'com.android.support:appcompat-v7:28.0.0'
     implementation 'com.android.support.constraint:constraint-layout:1.1.2'
-    implementation 'com.android.support:design:26.1.0'
+    implementation 'com.android.support:design:28.0.0'
     implementation 'com.github.codebutler:android-websockets:master-SNAPSHOT'
     implementation 'com.jjoe64:graphview:4.2.1'
     implementation 'com.jakewharton.threetenabp:threetenabp:1.1.0'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
-    implementation 'com.android.support:support-v4:26.1.0'
+    implementation 'com.android.support:support-v4:28.0.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.2.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.2.1'
+    implementation 'com.google.android.exoplayer:exoplayer:2.10.2'
 }

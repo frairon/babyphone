@@ -109,3 +109,7 @@ GST_DEBUG=INFO gst-launch-1.0 udpsrc caps="application/x-rtp,clock-rate=(int)800
 decodeserver:
 	rsync -av server/decodebin.c $(CAMHOST):/tmp/decodebin.c
 	ssh $(CAMHOST) bash -c 'cd /tmp/ && gcc `pkg-config --cflags glib-2.0 gstreamer-1.0 gstreamer-net-1.0` -o decodeserver /tmp/decodebin.c `pkg-config --libs glib-2.0 gstreamer-1.0 gstreamer-rtsp-server-1.0 gstreamer-net-1.0` -lm'
+
+
+deploy-hls:
+	rsync -av babyphone/hlsstream.py pi@devpi.fritz.box:
