@@ -2,34 +2,32 @@ package babyphone.frosi.babyphone
 
 import android.app.Activity
 import android.content.*
-import android.media.MediaPlayer
-import android.net.Uri
+import android.media.MediaCodec
+import android.media.MediaCodecList
+import android.media.MediaFormat
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
 import android.widget.Switch
 import android.widget.TextView
-import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import kotlinx.android.synthetic.main.activity_video.*
-import com.google.android.exoplayer2.ExoPlayerFactory
-import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.source.ProgressiveMediaSource
-import com.google.android.exoplayer2.ui.PlayerView
-import com.google.android.exoplayer2.source.MediaSource
-import com.google.android.exoplayer2.util.Util.getUserAgent
-import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
-import com.google.android.exoplayer2.util.Util
-import java.net.URL
+import org.greenrobot.eventbus.EventBus
+import org.greenrobot.eventbus.Subscribe
+import org.greenrobot.eventbus.ThreadMode
+import java.lang.Exception
 
 
-class Video : AppCompatActivity(), ServiceConnection {
+class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
 
     var player: Player? = null
 
     var url: String? = null
+
+    var mc: MediaCodec? = null
 
     var useLights: Boolean = false
         set(value) {
@@ -46,6 +44,7 @@ class Video : AppCompatActivity(), ServiceConnection {
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i("Video", "onCreate called")
@@ -54,19 +53,25 @@ class Video : AppCompatActivity(), ServiceConnection {
 
         url = intent.getStringExtra("url")
 
-        val player = ExoPlayerFactory.newSimpleInstance(this)
 
-        val vv = this.findViewById<View>(R.id.videoView) as PlayerView
-        vv.setPlayer(player)
+        val vv = this.findViewById<View>(R.id.videoView) as SurfaceView
+        vv.holder.addCallback(this)
+//        val lcBuilder = DefaultLoadControl.Builder()
+//        lcBuilder.setBackBuffer(1000, true)
+//        lcBuilder.setBufferDurationsMs(1000, 1000, 1000, 1000)
+//        val player = ExoPlayerFactory.newSimpleInstance(this, DefaultTrackSelector(), lcBuilder.createDefaultLoadControl())
 
-        val dataSourceFactory = DefaultDataSourceFactory(this,
-                Util.getUserAgent(this, "yourApplicationName"))
+//        val vv = this.findViewById<View>(R.id.videoView) as PlayerView
+//        vv.setPlayer(player)
+
+//        val dataSourceFactory = DefaultDataSourceFactory(this,
+//                Util.getUserAgent(this, "yourApplicationName"))
 // This is the MediaSource representing the media to be played.
-        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(Uri.parse("http://192.168.178.80:5000/stream.ts"))
+//        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+//                .createMediaSource(Uri.parse("http://192.168.178.80:5000/stream.ts"))
 // Prepare the player with the source.
-        player.prepare(videoSource)
-        player.playWhenReady = true
+//        player.prepare(videoSource)
+//        player.playWhenReady = true
         // Bind the player to the view.
         //playerView.setPlayer(player);
 
@@ -100,6 +105,90 @@ class Video : AppCompatActivity(), ServiceConnection {
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
     }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int): Unit {
+
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder): Unit {
+
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder): Unit {
+
+        val codecs = MediaCodecList(MediaCodecList.ALL_CODECS)
+        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 240)
+        val codec = codecs.findDecoderForFormat(format)
+        try {
+            val mc = MediaCodec.createByCodecName(codec)
+            mc.configure(format, holder.surface, null, 0)
+            mc.start()
+            this.mc = mc
+        } catch (e: Exception) {
+            Log.e("Video", "Error creating codec for format $format, codec $codec", e)
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun handleVideoFrame(cu: VideoFrame) {
+        // acquire a buffer-ID, wait up to 200ms for that
+        if (this.mc == null) {
+            return
+        }
+//        Log.w("Video", "received input frame ${cu.data.size}")
+        val inputBufferId = this.mc!!.dequeueInputBuffer(1000000)
+        if (inputBufferId < 0) {
+            Log.e("video", "No buffer available. Increase timeout?")
+            return
+        }
+
+        val inputBuffer = this.mc!!.getInputBuffer(inputBufferId)
+        // fill in the frame
+        inputBuffer.put(cu.data)
+        var flags = 0
+        if (cu.type == VideoFrame.Type.Config) {
+            flags = MediaCodec.BUFFER_FLAG_CODEC_CONFIG
+        } else if (cu.partial) {
+            flags = MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
+        }
+        try {
+            this.mc!!.queueInputBuffer(inputBufferId,
+                    cu.offset,
+                    cu.data.size,
+                    cu.timestamp,
+                    flags)
+        } catch (e: Exception) {
+            Log.e("Video", "error adding buffer", e)
+        }
+        try {
+            val bufInfo = MediaCodec.BufferInfo()
+            val outId = this.mc!!.dequeueOutputBuffer(bufInfo, 200000)
+            if (outId < 0) {
+                Log.i("Video", "no output buffer available")
+            } else {
+//                Log.i("video", "releasing output buffer")
+                this.mc!!.releaseOutputBuffer(outId, true)
+            }
+        } catch (e: Exception) {
+            Log.e("Video", "error releasing output buffer", e)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val eb = EventBus.getDefault()
+        eb.register(this)
+        eb.post(StreamAction(StreamAction.Action.Start))
+
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val eb = EventBus.getDefault()
+        eb.unregister(this)
+        eb.post(StreamAction(StreamAction.Action.Stop))
+    }
+
 
     override fun onPause() {
         super.onPause()
@@ -213,6 +302,11 @@ class Video : AppCompatActivity(), ServiceConnection {
     override fun onDestroy() {
         Log.i("connection-service", "connection service onDestroy")
         this.unbindService(this)
+
+        mc?.stop()
+        mc?.release()
+
+
         super.onDestroy()
     }
 

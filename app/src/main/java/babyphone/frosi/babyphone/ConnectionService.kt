@@ -10,11 +10,16 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.*
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.codebutler.android_websockets.WebSocketClient
+import org.greenrobot.eventbus.EventBus
+import org.greenrobot.eventbus.Subscribe
+import org.greenrobot.eventbus.ThreadMode
+import org.json.JSONException
 import org.json.JSONObject
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
@@ -192,7 +197,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         private set(value) {
             Log.d(TAG, "Setting connection state $value")
             field = value
-            sendAction(value.action)
+            EventBus.getDefault().post(ConnectionUpdated(value))
         }
 
     enum class ConnectionState(val action: String) {
@@ -317,6 +322,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         return true
     }
 
+
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver)
@@ -324,11 +330,27 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         currentHost = ""
         stopSocket()
         stopSelf()
+        EventBus.getDefault().unregister(this)
         super.onDestroy()
+    }
+
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun onStreamAction(sa: StreamAction) {
+        sa.action
+
+        val data = JSONObject();
+        if (sa.action == StreamAction.Action.Start) {
+            data.put("action", "_startstream");
+        } else {
+            data.put("action", "_stopstream");
+        }
+        Log.i(TAG, "sending to socket" + data.toString())
+        this.mWebSocketClient?.send(data.toString())
     }
 
     override fun onCreate() {
         Log.i(TAG, "onCreate")
+        EventBus.getDefault().register(this)
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
     }
 
@@ -372,6 +394,21 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             }
             "heartbeat" -> {
                 heartbeat.heartbeat()
+            }
+            "vframe" -> {
+                val type = VideoFrame.Type.fromInt(parsed.optInt("type"))
+                val offset = parsed.optInt("offset")
+                val timestamp = parsed.optLong("time")
+                val partial = parsed.optBoolean("partial")
+                val data = parsed.optString("data")
+                val dataBytes = Base64.decode(data, Base64.DEFAULT)
+                EventBus.getDefault().post(VideoFrame(
+                        dataBytes,
+                        offset,
+                        timestamp,
+                        type,
+                        partial
+                ))
             }
             else ->
                 Log.d(TAG, "unhandled message " + parsed)

@@ -1,5 +1,7 @@
 
-CAMHOST=pi@babyphone.fritz.box
+# CAMHOST=pi@babyphone.fritz.box
+# for safety reasons, rename the host so we don't accidentally deploy to the babyhpone
+CAMHOST=invalid
 
 .PHONY: client
 
@@ -38,10 +40,27 @@ install-remote:
 	ssh ${CAMHOST} 'cd /home/pi/pythonbabyphone && sudo python3 setup.py install'
 	ssh ${CAMHOST} 'cd /home/pi/pythonbabyphone && make autostart'
 
+
+DEVHOST=pi@devpi.fritz.box
+install-devpi:
+	ssh ${DEVHOST} 'mkdir -p /home/pi/babyphone'
+	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${DEVHOST}:/home/pi/babyphone/
+	ssh ${DEVHOST} 'cd /home/pi/babyphone && sudo python3 setup.py install'
+	# ssh ${DEVHOST} 'sudo systemctl restart babyphone'
+
+systemd-install:
+	sudo cp systemd/* /etc/systemd/system/
+	sudo systemctl daemon-reload
+
+# install all system dependencies on the pie
+prepare-system:
+	sudo apt-get install python3-opencv -y
+
 autostart:
 	sudo cp systemd/* /etc/systemd/system/
 	sudo systemctl daemon-reload
 	sudo systemctl restart babyphone
+
 
 test-audio:
 	GST_DEBUG=WARN gst-launch-1.0 -m playbin latency=500000000 uri=rtsp://${CAMHOST}:8554/audio

@@ -41,6 +41,6 @@ setup(
         'psutil',
         'RPi.GPIO',
         'aiohttp',
-        # 'opencv-python',
+        # 'scikit-image',
         ],
 )

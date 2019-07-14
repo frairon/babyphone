@@ -29,6 +29,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import org.greenrobot.eventbus.EventBus
+import org.greenrobot.eventbus.Subscribe
+import org.greenrobot.eventbus.ThreadMode
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
@@ -161,6 +164,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        EventBus.getDefault().register(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        EventBus.getDefault().unregister(this)
     }
 
     class TimedDrawable(val drawable: Drawable, val instant: Instant)
@@ -363,15 +376,17 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun handleConnnectionState(cu :ConnectionUpdated){
+        setConnectionStatus(cu.state)
+    }
+
     private fun connectToServiceBroadcast() {
         val activity = this
 
         this.serviceBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
-                    ConnectionService.ConnectionState.findState(intent.action)?.action -> {
-                        setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
-                    }
                     ConnectionService.ACTION_VOLUME_RECEIVED -> {
                         val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Point?
                         if (vol == null) {

@@ -71,11 +71,14 @@ if __name__ == '__main__':
                         action="store_true", help="Enable writing stats to separate file for performance debugging. Requires psutil package")
     args = parser.parse_args()
     babyphone.initLogger()
-    bp = babyphone.Babyphone()
-    if args.writeStats:
-        asyncio.ensure_future(writeStats())
-    loop.add_signal_handler(signal.SIGINT, signalStop)
-    logging.info("starting websockets server")
-    loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
-    loop.run_until_complete(runWebserver(bp))
-    loop.run_forever()
+    try:
+        bp = babyphone.Babyphone(loop)
+        if args.writeStats:
+            asyncio.ensure_future(writeStats())
+        loop.add_signal_handler(signal.SIGINT, signalStop)
+        logging.info("starting websockets server")
+        loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
+        loop.run_until_complete(runWebserver(bp))
+        loop.run_forever()
+    finally:
+        bp.close()
