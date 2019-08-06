@@ -162,7 +162,7 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
         }
         try {
             val bufInfo = MediaCodec.BufferInfo()
-            val outId = this.mc!!.dequeueOutputBuffer(bufInfo, 200000)
+            val outId = this.mc!!.dequeueOutputBuffer(bufInfo, 0)
             if (outId < 0) {
                 Log.i("Video", "no output buffer available")
             } else {

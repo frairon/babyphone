@@ -1,0 +1,22 @@
+[Unit]
+Description=Babyphone V2
+After=syslog.target
+
+[Service]
+Type=simple
+PIDFile=/var/local/babyphone2.pid
+ExecStart=/usr/bin/python3 -m babyphone2.server
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=BabyphoneV2
+ExecReload=/bin/kill $MAINPID
+ExecStop=/bin/kill $MAINPID
+KillMode=mixed
+User=pi
+Group=gpio
+Restart=on-failure
+RestartSec=10
+
+
+[Install]
+WantedBy=multi-user.target

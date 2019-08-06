@@ -46,7 +46,7 @@ install-devpi:
 	ssh ${DEVHOST} 'mkdir -p /home/pi/babyphone'
 	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${DEVHOST}:/home/pi/babyphone/
 	ssh ${DEVHOST} 'cd /home/pi/babyphone && sudo python3 setup.py install'
-	# ssh ${DEVHOST} 'sudo systemctl restart babyphone'
+	ssh ${DEVHOST} 'sudo systemctl restart babyphone'
 
 systemd-install:
 	sudo cp systemd/* /etc/systemd/system/
@@ -71,6 +71,15 @@ test-audiovideo:
 
 mictest:
 	gst-launch-1.0 pulsesrc ! audiochebband mode=band-pass lower-frequency=100 upper-frequency=6000 poles=4 ! audioconvert  ! queue min-threshold-time=1000000000 ! autoaudiosink
+
+
+# host used in Meadow network
+MHOST=pi@192.168.1.83
+deploy-babyphone2:
+	ssh ${MHOST} 'mkdir -p /home/pi/babyphone2'
+	rsync -av . --exclude app --exclude-from .gitignore --exclude babyphone --exclude .git ${MHOST}:/home/pi/babyphone2/
+	rsync -av ./babyphone --exclude app --exclude-from .gitignore --exclude .git ${MHOST}:/home/pi/babyphone2/babyphone2
+	ssh ${MHOST} 'cd /home/pi/babyphone2 && sudo python3 setup.py install'
 
 
 

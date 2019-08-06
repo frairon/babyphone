@@ -5,6 +5,10 @@ import logging
 import subprocess
 import sys
 import time
+import audioop
+import alsaaudio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -105,7 +109,11 @@ class Babyphone(object):
         # gpio.setmode(gpio.BCM)
         # gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
-        log.debug("starting streaming server")
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.stopEvent = threading.Event()
+
+        log.debug("starting audio level checker")
+        self.executor.submit(self._startAudioMonitoring, self.stopEvent)
         # self.streamServer = asyncio.ensure_future(runStreamServer(self))
         log.debug("...done")
 
@@ -117,6 +125,52 @@ class Babyphone(object):
         self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
         log.debug("done")
         self.streamingTask = None
+
+    def _startAudioMonitoring(self, event):
+        try:
+            log.debug("initializing Alsa PCM device")
+            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='dmic_sv')
+            inp.setchannels(2)
+            inp.setrate(48000)
+            inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
+            inp.setperiodsize(640)
+            log.debug("...initialization done")
+
+            minRms = 684982499
+            maxRms = 1518500249
+            log.debug("reading volume data")
+            lastSent = time.time()
+            while not event.is_set():
+                l, data = inp.read()
+
+                if l:
+                    rms = audioop.rms(data, 4)
+
+                    # if minRms == 0 or rms < minRms:
+                    #     minRms = rms
+                    #
+                    # if maxRms == 0 or rms > maxRms:
+                    #     maxRms = rms
+
+                    if maxRms and minRms and maxRms != minRms:
+                        level = float(rms - minRms) / float(maxRms-minRms)
+                        if time.time() - lastSent >= 0.5:
+                            log.debug("audio level: (%d - %d) current %d: %.2f"%( minRms, maxRms, rms, level))
+                            lastSent = time.time()
+                            asyncio.run_coroutine_threadsafe(self.broadcast({'action': 'volume',
+                                                     'volume': level,
+                                                     }), loop=self._loop)
+
+
+        except Exception as e:
+            log.error("Error monitoring audio")
+            log.exception(e)
+
+        except asyncio.CancelledError:
+            log.info("Stopping audio monitoring since the task was cancelled")
+
+
+
 
     @asyncio.coroutine
     def streamStatusUpdated(self):
@@ -179,10 +233,16 @@ class Babyphone(object):
         return any([con.streamingRequsted for con in self.conns])
 
     def close(self):
+        log.info("closing babyphone")
+        self.stopEvent.set()
+
+        log.debug("shutting down thread pool executor")
+        self.executor.shutdown()
+        log.debug("...done")
         # self.motion.stop()
         # self.streamServer.cancel()
-        gpio.cleanup()
         self.cam.close()
+        gpio.cleanup()
 
     def shutdown(self, conn):
         log.info("Shutting down machine as requested by %s", str(conn))
