@@ -2,10 +2,10 @@ import alsaaudio
 import sys
 import audioop
 import numpy as np
-inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='default')
-inp.setchannels(2)
+inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='plughw:CARD=Device')
+inp.setchannels(1)
 inp.setrate(8000)
-inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
+inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
 inp.setperiodsize(160)
 
 import math
@@ -33,8 +33,8 @@ import math
 
 # buf = ffi.new("char[%d]"%maxBuffers[0])
 try:
-    i = 0
-    a = 0
+    i = 1
+    a = (1<<16)-1
     with open("audio.raw", "wb") as out:
         while True:
             l, data = inp.read()
@@ -43,7 +43,8 @@ try:
             # print(l, len(data), len(npbuf))
 
             if l:
-                avg = audioop.rms(data, 4)
+                data = audioop.mul(data, 2, 4)
+                avg = audioop.rms(data, 2)
                 p = False
                 # avg = math.sqrt(avg)
                 if i == 0 or avg < i:

@@ -8,7 +8,7 @@ import time
 import audioop
 import alsaaudio
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, CancelledError
 
 import cv2
 import numpy as np
@@ -16,7 +16,7 @@ import picamera
 import RPi.GPIO as gpio
 import websockets.exceptions
 
-#from babyphone import motiondetect
+from babyphone2 import motiondetect
 
 
 class InvalidMessageException(Exception):
@@ -103,80 +103,78 @@ class Babyphone(object):
         self._loop = loop
         log.debug("starting babyphone")
         self.conns = set()
-        # self.motion = motiondetect.MotionDetect(self)
+        self.motion = motiondetect.MotionDetect(self)
 
         log.debug("configuring GPIO")
-        # gpio.setmode(gpio.BCM)
-        # gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
+        gpio.setmode(gpio.BCM)
+        gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
         self.executor = ThreadPoolExecutor(max_workers=4)
         self.stopEvent = threading.Event()
 
         log.debug("starting audio level checker")
         self.executor.submit(self._startAudioMonitoring, self.stopEvent)
-        # self.streamServer = asyncio.ensure_future(runStreamServer(self))
         log.debug("...done")
 
         log.debug("starting motion detection")
-        # self.motion.start()
+        self.motion.start()
         log.debug("done")
 
         log.debug("starting camera")
         self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
+        self.cam.rotation=90
         log.debug("done")
         self.streamingTask = None
 
     def _startAudioMonitoring(self, event):
         try:
             log.debug("initializing Alsa PCM device")
-            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='dmic_sv')
-            inp.setchannels(2)
-            inp.setrate(48000)
-            inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
-            inp.setperiodsize(640)
+            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='plughw:CARD=Device')
+            inp.setchannels(1)
+            inp.setrate(8000)
+            inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+            inp.setperiodsize(160)
             log.debug("...initialization done")
 
-            minRms = 684982499
-            maxRms = 1518500249
-            log.debug("reading volume data")
+            maxRms = (1<<15)-1 # only 15 because it's signed
             lastSent = time.time()
             while not event.is_set():
                 l, data = inp.read()
 
                 if l:
-                    rms = audioop.rms(data, 4)
+                    try:
+                        data = audioop.mul(data, 2, 4)
+                        rms = audioop.rms(data, 2)
 
-                    # if minRms == 0 or rms < minRms:
-                    #     minRms = rms
-                    #
-                    # if maxRms == 0 or rms > maxRms:
-                    #     maxRms = rms
-
-                    if maxRms and minRms and maxRms != minRms:
-                        level = float(rms - minRms) / float(maxRms-minRms)
                         if time.time() - lastSent >= 0.5:
-                            log.debug("audio level: (%d - %d) current %d: %.2f"%( minRms, maxRms, rms, level))
+                            level = float(rms) / float(maxRms)
                             lastSent = time.time()
                             asyncio.run_coroutine_threadsafe(self.broadcast({'action': 'volume',
                                                      'volume': level,
                                                      }), loop=self._loop)
+                    except audioop.error:
+                        continue
 
-
+        except (asyncio.CancelledError, CancelledError) as e:
+            log.info("Stopping audio monitoring since the task was cancelled")
         except Exception as e:
             log.error("Error monitoring audio")
             log.exception(e)
 
-        except asyncio.CancelledError:
-            log.info("Stopping audio monitoring since the task was cancelled")
 
 
 
 
     @asyncio.coroutine
     def streamStatusUpdated(self):
-        anyoneStreaming = any([con.streamRequested for con in self.conns])
-        log.info("updating stream status: %s", anyoneStreaming)
-        if anyoneStreaming:
+        while True:
+            if self.motion.isTakingPicture():
+                log.debug("waiting for motion detection to finish")
+                yield from asyncio.sleep(0.2)
+            else:
+                break
+
+        if self.isAnyoneStreaming():
             if self.streamingTask is None or self.streamingTask.done():
                 self.streamingTask = asyncio.ensure_future(self.startStream())
         else:
@@ -190,11 +188,11 @@ class Babyphone(object):
             self.cam.start_recording(self, format='h264', intra_period=10, profile='main', quality=23)
             # wait forever
             yield from asyncio.sleep(3600)
+        except (asyncio.CancelledError, CancelledError) as e:
+            log.info("streaming cancelled, will stop recording")
         except Exception as e:
             log.info("exception while streamcam ")
             log.exception(e)
-        except asyncio.CancelledError as e:
-            log.info("streaming cancelled, will stop recording")
         finally:
             log.info("stopping the recording")
             self.cam.stop_recording()
@@ -228,9 +226,8 @@ class Babyphone(object):
         for con in self.conns:
             yield from con._send(obj)
 
-    @asyncio.coroutine
     def isAnyoneStreaming(self):
-        return any([con.streamingRequsted for con in self.conns])
+        return any([con.streamRequested for con in self.conns])
 
     def close(self):
         log.info("closing babyphone")
@@ -364,9 +361,9 @@ class Connection(object):
             yield from self.bp.streamStatusUpdated()
         elif msg['action'] == 'motiondetect':
             if msg.get('value', False):
-                self.motiondetect.start()
+                self.motion.start()
             else:
-                self.motiondetect.stop()
+                self.motion.stop()
         else:
             log.error(
                 "Unhandled message from connection %s: %s", self, message)

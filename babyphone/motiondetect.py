@@ -38,31 +38,29 @@ class MotionDetect(object):
     def _takePicture(self, nightMode):
 
         try:
-            with picamera.PiCamera(resolution=(320, 240)) as cam:
-                yield from asyncio.sleep(0.5)
-                cam.rotation=90
-                # simulate to do something with the camera
-                stream = io.BytesIO()
-                # cam.color_effects = (128,128)
-                if nightMode:
-                    cam.brightness = 90
-                    cam.iso = 800
-                    cam.contrast = 90
-                    cam.awb_mode = 'off'
-                    cam.awb_gains = (1, 1)
-                    cam.exposure_mode = 'night'
-                    self._bp.setLights(True)
+            cam = self._bp.cam
+            # simulate to do something with the camera
+            stream = io.BytesIO()
+            # cam.color_effects = (128,128)
+            if nightMode:
+                cam.brightness = 90
+                cam.iso = 800
+                cam.contrast = 90
+                cam.awb_mode = 'off'
+                cam.awb_gains = (1, 1)
+                cam.exposure_mode = 'night'
+                self._bp.setLights(True)
 
-                else:
-                    cam.awb_mode = 'off'
-                    # cam.brightness = 90
-                    cam.awb_gains = (1, 1)
-                    # cam.contrast = 90
+            else:
+                cam.awb_mode = 'off'
+                # cam.brightness = 90
+                cam.awb_gains = (1, 1)
+                # cam.contrast = 90
 
-                yield from asyncio.sleep(1.0)
-                cam.capture(stream, format='jpeg')
-                if nightMode:
-                    self._bp.setLights(False)
+            yield from asyncio.sleep(1.0)
+            cam.capture(stream, format='jpeg')
+            if nightMode:
+                self._bp.setLights(False)
             # Construct a numpy array from the stream
             data = np.fromstring(stream.getvalue(), dtype=np.uint8)
             # "Decode" the image from the array, preserving color
@@ -92,8 +90,7 @@ class MotionDetect(object):
             counter += 1
             yield from asyncio.sleep(self._interval)
 
-            anyoneStreaming = yield from self._bp.isAnyoneStreaming()
-            if anyoneStreaming:
+            if self._bp.isAnyoneStreaming():
                 self.log.info(
                     "at least one connection is streaming, camera is busy, cannot do motion detection")
                 continue
