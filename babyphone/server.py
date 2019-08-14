@@ -8,7 +8,7 @@ from datetime import datetime
 
 import asyncio
 import websockets
-from babyphone2 import babyphone
+from babyphone2 import babyphone, discovery
 
 loop = asyncio.get_event_loop()
 
@@ -75,8 +75,10 @@ if __name__ == '__main__':
         bp = babyphone.Babyphone(loop)
         if args.writeStats:
             asyncio.ensure_future(writeStats())
+
         loop.add_signal_handler(signal.SIGINT, signalStop)
         logging.info("starting websockets server")
+        discovery.createDiscoveryServer(loop)
         loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
         loop.run_until_complete(runWebserver(bp))
         loop.run_forever()

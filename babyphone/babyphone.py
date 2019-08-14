@@ -161,10 +161,6 @@ class Babyphone(object):
             log.error("Error monitoring audio")
             log.exception(e)
 
-
-
-
-
     @asyncio.coroutine
     def streamStatusUpdated(self):
         while True:

@@ -29,3 +29,9 @@ class StreamAction(val action: Action) {
         }
     }
 }
+class Discover {
+
+}
+
+class Advertise(val host:String){
+}

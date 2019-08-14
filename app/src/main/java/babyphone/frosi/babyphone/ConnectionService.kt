@@ -163,6 +163,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private val mBinder = ConnectionServiceBinder()
     private var mWebSocketClient: WebSocketClient? = null
 
+    private val discovery = Discovery()
+
     private var heartbeat: HeartbeatWatcher = HeartbeatWatcher(::vibrate)
 
 
@@ -331,6 +333,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         stopSocket()
         stopSelf()
         EventBus.getDefault().unregister(this)
+        discovery.stop()
         super.onDestroy()
     }
 
@@ -352,6 +355,10 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "onCreate")
         EventBus.getDefault().register(this)
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
+
+        discovery.start()
+        EventBus.getDefault().post(Discover())
+//        discovery.discover()
     }
 
     override fun onConnect() {

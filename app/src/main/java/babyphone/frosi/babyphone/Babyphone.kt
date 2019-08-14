@@ -86,7 +86,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         //setSupportActionBar(toolbar)
         AndroidThreeTen.init(this);
 
-
         initVolumeGraph()
 
         val componentName = this.startService(Intent(this, ConnectionService::class.java))
@@ -190,7 +189,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                         Log.d("babyphone", "updating current view pager item to " + imagePager.getCount())
                         viewPager.setCurrentItem(imagePager.getCount(), true)
                     }
-                    }
+                }
 
             }
         }
@@ -377,9 +376,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     @Subscribe(threadMode = ThreadMode.POSTING)
-    fun handleConnnectionState(cu :ConnectionUpdated){
+    fun handleConnnectionState(cu: ConnectionUpdated) {
         setConnectionStatus(cu.state)
     }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    fun handleBabyphoneAdvertise(adv: Advertise) {
+        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
+        hostInput.text = adv.host
+    }
+
 
     private fun connectToServiceBroadcast() {
         val activity = this
@@ -494,6 +500,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.disconnect()
         this.unbindService(this)
         this.stopService(Intent(this, ConnectionService::class.java))
+        lifecycle.removeObserver(uiScope)
         super.onDestroy()
     }
 
