@@ -71,6 +71,7 @@ if __name__ == '__main__':
                         action="store_true", help="Enable writing stats to separate file for performance debugging. Requires psutil package")
     args = parser.parse_args()
     babyphone.initLogger()
+    logging.info("starting Server")
     try:
         bp = babyphone.Babyphone(loop)
         if args.writeStats:

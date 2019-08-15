@@ -272,16 +272,14 @@ class Babyphone(object):
         gpio.output(self.LIGHTS_GPIO, bool(on))
 
     def getLastPictureAsBytes(self):
-        return None
-        # lastPicture = self.motion.lastPicture
-        # if lastPicture is None:
-        #     return None
-        #
-        # return cv2.imencode(".png", lastPicture)[1].tostring()
+        lastPicture = self.motion.lastPicture
+        if lastPicture is None:
+            return None
+
+        return cv2.imencode(".png", lastPicture)[1].tostring()
 
     def getLastPictureTimestamp(self):
-        return None
-        # return self.motion.lastPictureTimestamp
+        return self.motion.lastPictureTimestamp
 
 class Connection(object):
 
