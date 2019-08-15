@@ -487,7 +487,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.lastExitPrompt = Instant.now()
                 return
             }
-            this.finish()
+            this.finishAffinity()
         }
     }
 
@@ -501,6 +501,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.unbindService(this)
         this.stopService(Intent(this, ConnectionService::class.java))
         lifecycle.removeObserver(uiScope)
+
         super.onDestroy()
     }
 

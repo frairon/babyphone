@@ -6,7 +6,7 @@ import socket
 class DiscoveryServer(asyncio.DatagramProtocol):
 
     def __init__(self, *args, **kwargs):
-        asyncio.DatagramProtocol.__init__(*args, **kwargs)
+        asyncio.DatagramProtocol.__init__(self, *args, **kwargs)
         self._host = socket.gethostbyaddr(self._get_ip())
 
     def _get_ip(self):

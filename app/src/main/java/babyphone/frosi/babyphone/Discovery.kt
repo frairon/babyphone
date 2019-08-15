@@ -26,20 +26,33 @@ class Discovery {
     }
 
     fun stop(){
+        Log.i("discovery", "disconnecting socket")
+        socket.disconnect()
+        socket.close()
         EventBus.getDefault().unregister(this)
     }
 
     fun run() {
         while (true) {
             val p = DatagramPacket(ByteArray(1024), 0, 1024)
-            socket.receive(p)
+            try {
+                socket.receive(p)
 
 
-            val parsed = JSONObject(p.data.toString(Charsets.UTF_8))
-            Log.i("discovery", "received broadcast " + parsed.toString() + " from " + p.address.toString())
-            if(parsed.optString("action") == "advertise"){
-                val adv = Advertise(parsed.optString("host"))
-                EventBus.getDefault().post(adv)
+                val parsed = JSONObject(p.data.toString(Charsets.UTF_8))
+                Log.i("discovery", "received broadcast " + parsed.toString() + " from " + p.address.toString())
+                if (parsed.optString("action") == "advertise") {
+                    val adv = Advertise(parsed.optString("host"))
+                    EventBus.getDefault().post(adv)
+                }
+            }catch(se : SocketException){
+                Log.i("discovery", "got SocketException " + se.localizedMessage)
+
+                if (socket.isConnected) {
+                    Thread.sleep(1000)
+                }else {
+                    return
+                }
             }
         }
     }
