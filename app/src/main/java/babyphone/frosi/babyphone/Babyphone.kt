@@ -2,30 +2,60 @@ package babyphone.frosi.babyphone
 
 import android.content.*
 import android.graphics.Color
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
-import android.support.constraint.Group
-import android.support.v4.content.ContextCompat
-import android.support.v4.content.LocalBroadcastManager
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.view.SurfaceView
 import android.view.View
 import android.widget.*
-import android.widget.CompoundButton
+import androidx.annotation.UiThread
+import androidx.annotation.WorkerThread
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleObserver
+import androidx.lifecycle.OnLifecycleEvent
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.viewpager.widget.ViewPager
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
-import kotlinx.android.synthetic.main.activity_babyphone.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import org.greenrobot.eventbus.EventBus
+import org.greenrobot.eventbus.Subscribe
+import org.greenrobot.eventbus.ThreadMode
 import org.threeten.bp.Instant
+import java.io.InputStream
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.CoroutineContext
 
+/**
+ * Coroutine context that automatically is cancelled when UI is destroyed
+ */
+class UiLifecycleScope : CoroutineScope, LifecycleObserver {
+
+    private lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = job + Dispatchers.Main
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_START)
+    fun onCreate() {
+        job = Job()
+    }
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+    fun destroy() = job.cancel()
+}
 
 class Babyphone : AppCompatActivity(), ServiceConnection {
 
@@ -36,17 +66,25 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
+    private var movementSeries = PointsGraphSeries<DataPoint>()
     private var useLights: Boolean = false
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
+    private val loaderJob = Job()
+    private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
+
+    private val uiScope = UiLifecycleScope()
+
+    private val imagePager = ImagePager(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
         setContentView(R.layout.activity_babyphone)
-        setSupportActionBar(toolbar)
+        //setSupportActionBar(toolbar)
         AndroidThreeTen.init(this);
-
 
         initVolumeGraph()
 
@@ -84,8 +122,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         btnShutdown.setOnClickListener {
             // disconnect before shutting down to avoid getting
             // the disconnected-notification
-            connect.isChecked = false
             this.service?.shutdown()
+            connect.isChecked = false
         }
 
         val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
@@ -116,6 +154,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
             this.service?.alarmsEnabled = isChecked
         }
+        val viewPager = this.findViewById<View>(R.id.imagePager) as ViewPager
+        viewPager.adapter = imagePager
 
         volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
         volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
@@ -123,7 +163,62 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+    }
 
+    override fun onStart() {
+        super.onStart()
+        EventBus.getDefault().register(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        EventBus.getDefault().unregister(this)
+    }
+
+    class TimedDrawable(val drawable: Drawable, val instant: Instant)
+
+    fun loadAndShowImage() {
+        loaderScope.launch {
+            val uri = service?.getMotionUrl()
+            if (uri != null) {
+                val timedImage = loadMotionImage(uri)
+                if (timedImage != null) {
+                    uiScope.launch {
+                        displayMotionImage(timedImage)
+                        val viewPager = findViewById<View>(R.id.imagePager) as ViewPager
+                        Log.d("babyphone", "updating current view pager item to " + imagePager.getCount())
+                        viewPager.setCurrentItem(imagePager.getCount(), true)
+                    }
+                }
+
+            }
+        }
+    }
+
+    @WorkerThread
+    fun loadMotionImage(uri: String): TimedDrawable? {
+
+        try {
+            val url = URL(uri)
+            Log.d("babyphone", "loading image from " + uri)
+            val connection = url.openConnection()
+            val pictureTime = connection.getHeaderField("picture-time")
+            val inputStream = connection.getContent() as InputStream
+            Log.d("babyphone", "...success!")
+            return TimedDrawable(
+                    Drawable.createFromStream(inputStream, "src name"),
+                    Instant.ofEpochSecond(pictureTime.toLong())
+            )
+        } catch (e: Exception) {
+            Log.e("babyphone", "Error loading image " + e)
+            return null
+        }
+    }
+
+    @UiThread
+    fun displayMotionImage(image: TimedDrawable) {
+        Log.d("babyhpone", "displaying image")
+        imagePager.addImage(image)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -161,9 +256,14 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         graph.addSeries(this.volumeSeries)
         graph.addSeries(this.thresholdSeries)
         graph.addSeries(this.alarmSeries)
+        graph.addSeries(this.movementSeries)
 
         this.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
         this.alarmSeries.color = Color.MAGENTA
+
+        this.movementSeries.shape = PointsGraphSeries.Shape.POINT
+        this.movementSeries.color = Color.DKGRAY
+        this.movementSeries.size = 5F
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
         this.volumeSeries.thickness = 4
@@ -188,7 +288,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         this.service = null
         if (this.serviceBroadcastReceiver != null) {
             Log.i("babyphone", "service disconnected, will unregister receiver")
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver)
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver!!)
         }
     }
 
@@ -228,6 +328,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
         this.volumeSeries.resetData(dataPoints.toTypedArray())
 
+        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
+        this.movementSeries.resetData(movementPoints.toTypedArray())
+
         val graph = this.findViewById(R.id.graph_volume) as GraphView?
 
         graph?.viewport?.setMinX(volumeSeries.lowestValueX)
@@ -244,7 +347,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 runOnUiThread {
                     connecting.visibility = View.VISIBLE
                     btnShutdown.isEnabled = false
-                    btnVideo.visibility = View.GONE
+//                    btnVideo.visibility = View.GONE
                     connect.text = getString(R.string.switchConnect_Connecting)
                     if (setButton) connect.isChecked = true
                 }
@@ -257,11 +360,13 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                     connect.text = getString(R.string.switchConnect_Connected)
                     if (setButton) connect.isChecked = true
                 }
+
+                loadAndShowImage()
             }
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
                     connecting.visibility = View.GONE
-                    btnVideo.visibility = View.GONE
+//                    btnVideo.visibility = View.GONE
                     btnShutdown.isEnabled = false
                     connect.text = getString(R.string.switchConnect_Disconnected)
                     if (setButton) connect.isChecked = false
@@ -270,21 +375,42 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun handleConnnectionState(cu: ConnectionUpdated) {
+        setConnectionStatus(cu.state)
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    fun handleBabyphoneAdvertise(adv: Advertise) {
+        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
+        hostInput.text = adv.host
+    }
+
+
     private fun connectToServiceBroadcast() {
         val activity = this
+
         this.serviceBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
-                    ConnectionService.ConnectionState.findState(intent.action)?.action -> {
-                        setConnectionStatus(ConnectionService.ConnectionState.findState(intent.action)!!)
-                    }
                     ConnectionService.ACTION_VOLUME_RECEIVED -> {
-                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Volume?
+                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Point?
                         if (vol == null) {
                             Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
                             return
                         }
                         activity.addVolumeToGraph(vol)
+                    }
+                    ConnectionService.ACTION_MOVEMENT_RECEIVED -> {
+                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_MOVEMENT) as Point?
+                        if (vol == null) {
+                            Log.e("babyphone", "Receivd null movement in movement intent. Ignoring.")
+                            return
+                        }
+
+                        activity.addMovementToGraph(vol)
+
+                        loadAndShowImage()
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {
                         activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
@@ -302,13 +428,13 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             }
         }
         LocalBroadcastManager.getInstance(this).registerReceiver(
-                this.serviceBroadcastReceiver,
+                this.serviceBroadcastReceiver!!,
                 ConnectionService.createActionIntentFilter()
         )
     }
 
 
-    fun addVolumeToGraph(vol: Volume) {
+    fun addVolumeToGraph(vol: Point) {
         val newPoint = DataPoint(vol.time, vol.volume.toDouble())
         runOnUiThread {
             volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
@@ -318,14 +444,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
-    // Called from native code when the size of the media changes or is first detected.
-    // Inform the video surface about the new size and recalculate the layout.
-    fun onMediaSizeChanged(width: Int, height: Int) {
-        Log.i("GStreamer", "Media size changed to " + width + "x" + height)
-        val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
-        gsv.media_width = width
-        gsv.media_height = height
-        runOnUiThread { gsv.requestLayout() }
+    fun addMovementToGraph(vol: Point) {
+        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
+        runOnUiThread {
+            movementSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
+        }
     }
 
 
@@ -353,10 +476,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
                 this.lastExitPrompt = Instant.now()
                 return
             }
-            this.disconnect()
-            this.unbindService(this)
-            this.stopService(Intent(this, ConnectionService::class.java))
-            this.finish()
+            this.finishAffinity()
         }
     }
 
@@ -367,6 +487,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     override fun onDestroy() {
         Log.i("babyphone", "babyphone on destroy")
         this.disconnect()
+        this.unbindService(this)
+        this.stopService(Intent(this, ConnectionService::class.java))
+        lifecycle.removeObserver(uiScope)
+
         super.onDestroy()
     }
 

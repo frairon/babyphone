@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 import argparse
-from datetime import datetime
 import logging
 import signal
 import sys
+from datetime import datetime
 
 import asyncio
-from babyphone import babyphone
 import websockets
+from babyphone2 import babyphone, discovery
 
 loop = asyncio.get_event_loop()
 
@@ -45,8 +45,15 @@ def runWebserver(bp):
     from aiohttp import web
 
     logging.info("starting application server")
+
     def latest(request):
-        return web.Response(text="hello world")
+        return web.Response(
+            body=bp.getLastPictureAsBytes(),
+            content_type='image/png',
+            headers={
+                'picture-time': "%s" % bp.getLastPictureTimestamp(),
+            },
+        )
 
     app = web.Application()
     app.add_routes([web.get('/latest', latest)])
@@ -64,11 +71,17 @@ if __name__ == '__main__':
                         action="store_true", help="Enable writing stats to separate file for performance debugging. Requires psutil package")
     args = parser.parse_args()
     babyphone.initLogger()
-    bp = babyphone.Babyphone()
-    if args.writeStats:
-        asyncio.ensure_future(writeStats())
-    loop.add_signal_handler(signal.SIGINT, signalStop)
-    logging.info("starting websockets server")
-    loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
-    loop.run_until_complete(runWebserver(bp))
-    loop.run_forever()
+    logging.info("starting Server")
+    try:
+        bp = babyphone.Babyphone(loop)
+        if args.writeStats:
+            asyncio.ensure_future(writeStats())
+
+        loop.add_signal_handler(signal.SIGINT, signalStop)
+        logging.info("starting websockets server")
+        discovery.createDiscoveryServer(loop)
+        loop.run_until_complete(websockets.serve(bp.connect, '0.0.0.0', 8080))
+        loop.run_until_complete(runWebserver(bp))
+        loop.run_forever()
+    finally:
+        bp.close()

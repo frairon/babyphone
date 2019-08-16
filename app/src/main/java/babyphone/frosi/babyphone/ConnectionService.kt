@@ -8,17 +8,18 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.os.Binder
-import android.os.Build
-import android.os.Handler
-import android.os.IBinder
+import android.os.*
 import android.provider.Settings
-import android.support.v4.app.NotificationCompat
-import android.support.v4.app.NotificationManagerCompat
-import android.support.v4.app.TaskStackBuilder
-import android.support.v4.content.LocalBroadcastManager
+import android.util.Base64
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.codebutler.android_websockets.WebSocketClient
+import org.greenrobot.eventbus.EventBus
+import org.greenrobot.eventbus.Subscribe
+import org.greenrobot.eventbus.ThreadMode
+import org.json.JSONException
 import org.json.JSONObject
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
@@ -29,33 +30,46 @@ import java.util.*
 import kotlin.math.roundToInt
 
 
-class Volume(val time: Date, val volume: Int) : Serializable {
+class Point(val time: Date, val volume: Int) : Serializable {
 }
 
 class History(private val maxSize: Int) {
 
     var alarms: MutableList<Instant> = ArrayList<Instant>()
-
-    var volumes: MutableList<Volume> = ArrayList<Volume>()
         private set
 
-    fun add(vol: Volume) {
+    var volumes: MutableList<Point> = ArrayList<Point>()
+        private set
+
+    var movements: MutableList<Point> = ArrayList<Point>()
+        private set
+
+
+    fun addVolume(vol: Point) {
         volumes.add(vol)
         volumes.sortBy { vol.time }
         val earliest = Date(Instant.now().minus(Duration.ofMinutes(5)).toEpochMilli())
         this.volumes = this.volumes.filter { vol -> vol.time.after(earliest) }.toMutableList()
     }
 
+    fun addMovement(mov: Point) {
+        movements.add(mov)
+        movements.sortBy { mov.time }
+        val earliest = Date(Instant.now().minus(Duration.ofMinutes(5)).toEpochMilli())
+        this.movements = this.movements.filter { mov -> mov.time.after(earliest) }.toMutableList()
+    }
+
     fun clear() {
         this.alarms.clear()
         this.volumes.clear()
+        this.movements.clear()
     }
 
     fun averageVolumeSince(past: Duration): Int {
         var sum = 0
         var count = 0
         var start = Instant.now().minus(past)
-        for (vol: Volume in volumes.reversed()) {
+        for (vol: Point in volumes.reversed()) {
             // TODO: replace Date with instant in volume
             if (vol.time.time < start.toEpochMilli()) {
                 break
@@ -101,35 +115,91 @@ class History(private val maxSize: Int) {
     }
 }
 
+class HeartbeatWatcher(private val notifier: ((LongArray) -> Unit)) {
+
+    private var handler = Handler()
+
+    private var lastBeat: Instant = Instant.now()
+    private var alarmSkip: Duration = Duration.ofMillis(3000)
+
+    private var running: Boolean = false
+
+    fun start() {
+        running = true
+        lastBeat = Instant.now()
+        schedule()
+    }
+
+    private fun schedule() {
+        handler.postDelayed({
+            check()
+        }, 20000)
+    }
+
+    private fun check() {
+        // stopped while we were sleeping
+        if (!running) {
+            return
+        }
+
+        if (Duration.between(lastBeat, Instant.now()) > alarmSkip) {
+            notifier(arrayOf(0, 150L, 150L, 150L).toLongArray())
+        }
+        // schedule to run again
+        schedule()
+    }
+
+    fun heartbeat() {
+        lastBeat = Instant.now()
+    }
+
+    fun stop() {
+        running = false
+    }
+}
+
 class ConnectionService : Service(), WebSocketClient.Listener {
 
     private val mBinder = ConnectionServiceBinder()
     private var mWebSocketClient: WebSocketClient? = null
 
+    private val discovery = Discovery()
 
-    private var currentUri: String? = null
+    private var heartbeat: HeartbeatWatcher = HeartbeatWatcher(::vibrate)
+
+
+    private var currentHost: String? = null
     var volumeThreshold: Int = 50
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
 
     var handler = Handler()
+    var reconnectScheduled: Boolean = false
+
 
     var lights: Boolean = false
-    set(value){
-        field = value
-        val data = JSONObject();
-        data.put("action", if(value) "lightson" else "lightsoff");
-        this.mWebSocketClient?.send(data.toString())
-    }
+        set(value) {
+            field = value
+            val data = JSONObject();
+            data.put("action", if (value) "lightson" else "lightsoff");
+            this.mWebSocketClient?.send(data.toString())
+        }
 
     var alarmsEnabled: Boolean = true
 
     var autoVolumeLevel: Boolean = false
 
+    fun getMotionUrl(): String? {
+        if (currentHost == null || currentHost == "") {
+            return null
+        }
+        return "http://$currentHost:8081/latest"
+    }
+
     var connectionState: ConnectionState = ConnectionState.Disconnected
         private set(value) {
             Log.d(TAG, "Setting connection state $value")
             field = value
-            sendAction(value.action)
+            EventBus.getDefault().post(ConnectionUpdated(value))
         }
 
     enum class ConnectionState(val action: String) {
@@ -176,26 +246,28 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     fun connectToHost(host: String) {
-        this.currentUri = "ws://$host:8080"
-        Log.i(TAG, "configuring websocket-uri ${this.currentUri}")
+        this.currentHost = host
+        Log.i(TAG, "configuring websocket-uri ${this.currentHost}")
 
         this.startForeground()
+        this.heartbeat.start()
 
         startSocket(reconnect = true)
     }
 
     fun disconnect() {
         Log.i(TAG, "service disconnect requested")
-        this.currentUri = ""
+        this.currentHost = ""
         this.stopForeground(true)
         stopSocket()
+        this.heartbeat.stop()
 
         Log.i(TAG, "removing notification")
         NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
     }
 
     private fun shouldConnect(): Boolean {
-        return this.currentUri != ""
+        return this.currentHost != ""
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -209,6 +281,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val data = JSONObject();
         data.put("action", "shutdown");
         this.mWebSocketClient?.send(data.toString())
+        this.disconnect()
     }
 
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
@@ -251,19 +324,41 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         return true
     }
 
+
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver)
         stopForeground(true)
-        currentUri = ""
+        currentHost = ""
         stopSocket()
         stopSelf()
+        EventBus.getDefault().unregister(this)
+        discovery.stop()
         super.onDestroy()
+    }
+
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun onStreamAction(sa: StreamAction) {
+        sa.action
+
+        val data = JSONObject();
+        if (sa.action == StreamAction.Action.Start) {
+            data.put("action", "_startstream");
+        } else {
+            data.put("action", "_stopstream");
+        }
+        Log.i(TAG, "sending to socket" + data.toString())
+        this.mWebSocketClient?.send(data.toString())
     }
 
     override fun onCreate() {
         Log.i(TAG, "onCreate")
+        EventBus.getDefault().register(this)
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
+
+        discovery.start()
+        EventBus.getDefault().post(Discover())
+//        discovery.discover()
     }
 
     override fun onConnect() {
@@ -283,14 +378,56 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     private fun parseAndSendAction(message: String) {
         val parsed = JSONObject(message)
-        if (parsed.has("volume")) {
-            val volume = parsed.getDouble("volume")
-            val vol = Volume(Date(), (volume * 100.0).toInt())
-            history.add(vol)
-            this.handleVolume(vol)
-            sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, vol) })
+
+        when (parsed.optString("action")) {
+            "volume" -> {
+                val volume = parsed.optDouble("volume")
+                val vol = Point(Date(), (volume * 100.0).toInt())
+                history.addVolume(vol)
+                this.handleVolume(vol)
+                sendAction(ACTION_VOLUME_RECEIVED, { intent -> intent.putExtra(ACTION_EXTRA_VOLUME, vol) })
+            }
+            "movement" -> {
+                val movement = parsed.optDouble("value")
+                val mov = Point(Date(), (movement * 100.0).toInt())
+                history.addMovement(mov)
+                sendAction(ACTION_MOVEMENT_RECEIVED, { intent ->
+                    intent.putExtra(ACTION_EXTRA_MOVEMENT, mov)
+                    intent.putExtra(ACTION_EXTRA_MOVEMENT_MOVED, parsed.optBoolean("moved"))
+                })
+                if (parsed.optBoolean("moved")) {
+                    vibrate(arrayOf(0L, 150L).toLongArray())
+                }
+            }
+            "heartbeat" -> {
+                heartbeat.heartbeat()
+            }
+            "vframe" -> {
+                val type = VideoFrame.Type.fromInt(parsed.optInt("type"))
+                val offset = parsed.optInt("offset")
+                val timestamp = parsed.optLong("time")
+                val partial = parsed.optBoolean("partial")
+                val data = parsed.optString("data")
+                val dataBytes = Base64.decode(data, Base64.DEFAULT)
+                EventBus.getDefault().post(VideoFrame(
+                        dataBytes,
+                        offset,
+                        timestamp,
+                        type,
+                        partial
+                ))
+            }
+            else ->
+                Log.d(TAG, "unhandled message " + parsed)
+        }
+    }
+
+
+    private fun vibrate(pattern: LongArray) {
+        if (Build.VERSION.SDK_INT >= 26) {
+            (getSystemService(VIBRATOR_SERVICE) as Vibrator).vibrate(VibrationEffect.createWaveform(pattern, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
-            Log.d(TAG, "Unparsed message from websocket received. Ignoring: " + parsed)
+            (getSystemService(VIBRATOR_SERVICE) as Vibrator).vibrate(pattern, -1)
         }
     }
 
@@ -299,13 +436,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         NotificationManagerCompat.from(this).notify(if (isAlarm) NOTI_ALARM_ID else NOTI_SERVICE_ID, notification)
     }
 
-//    private fun doAlarmVibrate() {
-//        val effect = VibrationEffect.createWaveform(arrayOf(900L, 100L, 900L, 100L, 1000L, 500L).toLongArray(), arrayOf(120, 0, 200, 0, 255, 0).toIntArray(), 4)
-//        val vibrator = getSystemService(Vibrator::class.java) as Vibrator
-//        vibrator.vibrate(effect);
-//    }
-
-    fun handleVolume(volume: Volume) {
+    fun handleVolume(volume: Point) {
         if (!alarmsEnabled) {
             return
         }
@@ -335,7 +466,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
             doNotify({ builder ->
                 builder.setLights(Color.RED, 500, 500)
-                builder.setVibrate(arrayOf(2000L, 1000L, 2000L, 1000L, 2000L, 1000L, 10000L).toLongArray())
+                builder.setVibrate(arrayOf(0L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L).toLongArray())
                 builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
                 builder.setContentText("Luise is crying")
                 builder.addAction(R.drawable.ic_snooze_black_24dp, "snooze", disableAlarmPending);
@@ -360,30 +491,35 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "Websocket onDisconnect()")
         Log.i(TAG, "Code: $code - Reason: $reason")
 
+        stopSocket()
 
         if (this.shouldConnect()) {
             Log.i(TAG, "got disconnected, will try to reconnect")
-            handler.postDelayed({
-                startSocket(true)
-            }, 3000)
-            connectionState = ConnectionState.Connecting
-            doNotify({ x -> this.addConnectionState(x) })
+            scheduleConnect(false)
         } else {
             Log.i(TAG, "removing notification")
             NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
         }
     }
 
+    private fun scheduleConnect(reconnect: Boolean = false) {
+        if (reconnectScheduled) {
+            // do not double schedule
+            return
+        }
+        handler.postDelayed({
+            startSocket(reconnect)
+        }, 3000)
+        connectionState = ConnectionState.Connecting
+        doNotify({ x -> this.addConnectionState(x) })
+
+    }
+
     override fun onError(error: Exception) {
         Log.i(TAG, "onError ")
         if (this.shouldConnect()) {
             Log.e(TAG, "Websocket onError " + error.toString())
-            // if we were trying to connect
-            handler.postDelayed({
-                startSocket(true)
-            }, 3000)
-            connectionState = ConnectionState.Connecting
-            doNotify({ x -> this.addConnectionState(x) })
+            scheduleConnect(true)
         } else {
             Log.i(TAG, "removing notification")
             NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
@@ -392,7 +528,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     private fun startSocket(reconnect: Boolean = false) {
         Log.d(TAG, "startSocket")
-        if (this.currentUri == null) {
+        if (this.currentHost == null) {
             Log.i(TAG, "No host configured. Will not attempt to connect")
             return
         }
@@ -406,7 +542,8 @@ class ConnectionService : Service(), WebSocketClient.Listener {
             }
         }
 
-        mWebSocketClient = WebSocketClient(URI.create(this.currentUri), this, null)
+
+        mWebSocketClient = WebSocketClient(URI.create("ws://$currentHost:8080"), this, null)
         mWebSocketClient!!.connect()
 
         connectionState = ConnectionState.Connecting
@@ -450,6 +587,9 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     companion object {
         val ACTION_VOLUME_RECEIVED = "volumeReceived"
         val ACTION_EXTRA_VOLUME = "volume"
+        val ACTION_MOVEMENT_RECEIVED = "movementReceived"
+        val ACTION_EXTRA_MOVEMENT = "movement"
+        val ACTION_EXTRA_MOVEMENT_MOVED = "moved"
         val ACTION_MSG_RECEIVED = "msgReceived"
         val ACTION_NETWORK_STATE_CHANGED = "networkStateChanged"
         val ACTION_ALARM_TRIGGERED = "alarmTriggered"
@@ -464,6 +604,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         fun createActionIntentFilter(): IntentFilter {
             val filter = IntentFilter()
             filter.addAction(ACTION_VOLUME_RECEIVED)
+            filter.addAction(ACTION_MOVEMENT_RECEIVED)
             filter.addAction(ConnectionState.Disconnected.action)
             filter.addAction(ConnectionState.Connected.action)
             filter.addAction(ConnectionState.Connecting.action)

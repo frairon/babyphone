@@ -176,10 +176,10 @@ static guint initVolumePipeline(GstElement *pipeline) {
   /* make sure we'll get messages */
   g_object_set(G_OBJECT(level), "post-messages", TRUE, NULL);
   g_object_set(G_OBJECT(level), "interval", (guint64)150000000, NULL);
-  g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)10, NULL);
+  g_object_set(G_OBJECT(audiosrc), "volume", (gdouble)3, NULL);
   /* run synced and not as fast as we can */
   g_object_set(G_OBJECT(fakesink), "sync", TRUE, NULL);
-  g_object_set(G_OBJECT(volume), "volume", 0.99, NULL);
+  g_object_set(G_OBJECT(volume), "volume", (gdouble) 3, NULL);
 
   g_object_set(G_OBJECT(passfilter), "lower-frequency", (gfloat)100, NULL);
   g_object_set(G_OBJECT(passfilter), "upper-frequency", (gfloat)12000, NULL);

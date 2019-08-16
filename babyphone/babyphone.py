@@ -1,16 +1,22 @@
-
-
+import asyncio
+import base64
 import json
 import logging
 import subprocess
 import sys
 import time
+import audioop
+import alsaaudio
+import threading
+from concurrent.futures import ThreadPoolExecutor, CancelledError
 
+import cv2
+import numpy as np
+import picamera
+import RPi.GPIO as gpio
 import websockets.exceptions
 
-import asyncio
-import RPi.GPIO as gpio
-from babyphone import motiondetect
+from babyphone2 import motiondetect
 
 
 class InvalidMessageException(Exception):
@@ -92,7 +98,9 @@ class Babyphone(object):
 
     LIGHTS_GPIO = 24
 
-    def __init__(self):
+    def __init__(self, loop):
+        self._data = []
+        self._loop = loop
         log.debug("starting babyphone")
         self.conns = set()
         self.motion = motiondetect.MotionDetect(self)
@@ -101,28 +109,132 @@ class Babyphone(object):
         gpio.setmode(gpio.BCM)
         gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
-        log.debug("starting streaming server")
-        self.streamServer = asyncio.ensure_future(runStreamServer(self))
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.stopEvent = threading.Event()
+
+        log.debug("starting audio level checker")
+        self.executor.submit(self._startAudioMonitoring, self.stopEvent)
         log.debug("...done")
 
         log.debug("starting motion detection")
         self.motion.start()
         log.debug("done")
 
+        log.debug("starting camera")
+        self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
+        self.cam.rotation=90
+        log.debug("done")
+        self.streamingTask = None
 
+    def _startAudioMonitoring(self, event):
+        try:
+            log.debug("initializing Alsa PCM device")
+            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='plughw:CARD=Device')
+            inp.setchannels(1)
+            inp.setrate(8000)
+            inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+            inp.setperiodsize(160)
+            log.debug("...initialization done")
 
+            maxRms = (1<<15)-1 # only 15 because it's signed
+            lastSent = time.time()
+            while not event.is_set():
+                l, data = inp.read()
+
+                if l:
+                    try:
+                        data = audioop.mul(data, 2, 4)
+                        rms = audioop.rms(data, 2)
+
+                        if time.time() - lastSent >= 0.5:
+                            level = float(rms) / float(maxRms)
+                            lastSent = time.time()
+                            asyncio.run_coroutine_threadsafe(self.broadcast({'action': 'volume',
+                                                     'volume': level,
+                                                     }), loop=self._loop)
+                    except audioop.error:
+                        continue
+
+        except (asyncio.CancelledError, CancelledError) as e:
+            log.info("Stopping audio monitoring since the task was cancelled")
+        except Exception as e:
+            log.error("Error monitoring audio")
+            log.exception(e)
+
+    @asyncio.coroutine
+    def streamStatusUpdated(self):
+        while True:
+            if self.motion.isTakingPicture():
+                log.debug("waiting for motion detection to finish")
+                yield from asyncio.sleep(0.2)
+            else:
+                break
+
+        if self.isAnyoneStreaming():
+            if self.streamingTask is None or self.streamingTask.done():
+                self.streamingTask = asyncio.ensure_future(self.startStream())
+        else:
+            if self.streamingTask and not self.streamingTask.done():
+                self.streamingTask.cancel()
+
+    @asyncio.coroutine
+    def startStream(self):
+        try:
+            log.info("Start recording with cam")
+            self.cam.start_recording(self, format='h264', intra_period=10, profile='main', quality=23)
+            # wait forever
+            yield from asyncio.sleep(3600)
+        except (asyncio.CancelledError, CancelledError) as e:
+            log.info("streaming cancelled, will stop recording")
+        except Exception as e:
+            log.info("exception while streamcam ")
+            log.exception(e)
+        finally:
+            log.info("stopping the recording")
+            self.cam.stop_recording()
+
+    def write(self, data):
+        try:
+            # log.info("receiving data")
+            self._data.extend(data)
+            # log.info("checking for frame complete")
+            if self.cam.frame.complete:
+                # log.info("got frame %s: %s", str(self.cam.frame), self._data[:10])
+                frame = self.cam.frame
+                msg = dict(
+                    action="vframe",
+                    offset=frame.position,
+                    timestamp=frame.timestamp,
+                    data=base64.b64encode(bytes(self._data)).decode('ascii'),
+                    type=0,
+                )
+                if frame == picamera.PiVideoFrameType.sps_header:
+                    msg['type'] = 1
+                # log.info("broadcasting message")
+                asyncio.run_coroutine_threadsafe(self.broadcast(msg), loop=self._loop)
+                # self._loop.run_until_complete(t)
+
+                self._data = []
+        except Exception as e:
+            log.exception(e)
     @asyncio.coroutine
     def broadcast(self, obj):
         for con in self.conns:
             yield from con._send(obj)
 
-    @asyncio.coroutine
     def isAnyoneStreaming(self):
-        return any([con.isStreaming() for con in self.conns])
+        return any([con.streamRequested for con in self.conns])
 
     def close(self):
-        self.motion.stop()
-        self.streamServer.cancel()
+        log.info("closing babyphone")
+        self.stopEvent.set()
+
+        log.debug("shutting down thread pool executor")
+        self.executor.shutdown()
+        log.debug("...done")
+        # self.motion.stop()
+        # self.streamServer.cancel()
+        self.cam.close()
         gpio.cleanup()
 
     def shutdown(self, conn):
@@ -146,8 +258,8 @@ class Babyphone(object):
     def updateState(self):
 
         # do not touch the lights if motion detect is currently active.
-        if self.motion.isTakingPicture():
-            return
+        # if self.motion.isTakingPicture():
+        #     return
 
         # check if anyone needs lights
         needLights = any([con.useLights for con in self.conns])
@@ -159,6 +271,15 @@ class Babyphone(object):
         log.info("turning lights %s", "on" if on else "off")
         gpio.output(self.LIGHTS_GPIO, bool(on))
 
+    def getLastPictureAsBytes(self):
+        lastPicture = self.motion.lastPicture
+        if lastPicture is None:
+            return None
+
+        return cv2.imencode(".png", lastPicture)[1].tostring()
+
+    def getLastPictureTimestamp(self):
+        return self.motion.lastPictureTimestamp
 
 class Connection(object):
 
@@ -168,16 +289,13 @@ class Connection(object):
     def __init__(self, babyphone, websocket):
         self._ws = websocket
         self.bp = babyphone
-        self.state = self.IDLE
 
         self.useLights = False
+        self.streamRequested = False
 
         log.info("Client connected")
 
         self._heartbeat = asyncio.ensure_future(self.heartbeat())
-
-    def isStreaming(self):
-        return self.state in [self.STREAMING]
 
     @asyncio.coroutine
     def run(self):
@@ -200,10 +318,11 @@ class Connection(object):
         log.info("Starting heartbeating to client")
         while True:
             try:
-                yield from asyncio.sleep(1)
                 yield from self._send({'action': 'heartbeat'})
             except websockets.exceptions.ConnectionClosed as e:
                 return
+
+            yield from asyncio.sleep(1)
 
     @asyncio.coroutine
     def _send(self, obj):
@@ -228,11 +347,17 @@ class Connection(object):
             self.bp.setLights(True)
         elif msg['action'] == 'lightsoff':  # deprecated, remove
             self.bp.setLights(False)
+        elif msg['action'] == '_startstream':
+            self.streamRequested = True
+            yield from self.bp.streamStatusUpdated()
+        elif msg['action'] == '_stopstream':
+            self.streamRequested = False
+            yield from self.bp.streamStatusUpdated()
         elif msg['action'] == 'motiondetect':
             if msg.get('value', False):
-                self.motiondetect.start()
+                self.motion.start()
             else:
-                self.motiondetect.stop()
+                self.motion.stop()
         else:
             log.error(
                 "Unhandled message from connection %s: %s", self, message)

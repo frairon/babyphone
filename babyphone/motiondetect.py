@@ -1,9 +1,9 @@
+import base64
 import io
 import logging
 import math
 import time
 from datetime import datetime
-import base64
 
 import asyncio
 import cv2
@@ -21,6 +21,9 @@ class MotionDetect(object):
         self._bp = babyphone
         self.log = logging.getLogger("babyphone")
 
+        self.lastPicture = None
+        self.lastPictureTimestamp = 0
+
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
 
@@ -35,26 +38,29 @@ class MotionDetect(object):
     def _takePicture(self, nightMode):
 
         try:
-            with picamera.PiCamera(resolution=(240, 180)) as cam:
-                yield from asyncio.sleep(1)
-                # simulate to do something with the camera
-                stream = io.BytesIO()
-                # cam.color_effects = (128,128)
-                if nightMode:
-                    cam.brightness = 90
-                    cam.iso = 800
-                    cam.contrast = 90
-                    cam.awb_mode = 'off'
-                    cam.awb_gains = (1, 1)
-                    cam.exposure_mode = 'night'
-                    self._bp.setLights(True)
-                    yield from asyncio.sleep(0.1)
-                else:
-                    cam.awb_mode = 'off'
+            cam = self._bp.cam
+            # simulate to do something with the camera
+            stream = io.BytesIO()
+            # cam.color_effects = (128,128)
+            if nightMode:
+                cam.brightness = 90
+                cam.iso = 800
+                cam.contrast = 90
+                cam.awb_mode = 'off'
+                cam.awb_gains = (1, 1)
+                cam.exposure_mode = 'night'
+                self._bp.setLights(True)
 
-                cam.capture(stream, format='jpeg')
-                if nightMode:
-                    self._bp.setLights(False)
+            else:
+                cam.awb_mode = 'off'
+                # cam.brightness = 90
+                cam.awb_gains = (1, 1)
+                # cam.contrast = 90
+
+            yield from asyncio.sleep(1.0)
+            cam.capture(stream, format='jpeg')
+            if nightMode:
+                self._bp.setLights(False)
             # Construct a numpy array from the stream
             data = np.fromstring(stream.getvalue(), dtype=np.uint8)
             # "Decode" the image from the array, preserving color
@@ -82,11 +88,9 @@ class MotionDetect(object):
         counter = 0
         while True:
             counter += 1
-            self.log.info("Motion detect runner next loop")
             yield from asyncio.sleep(self._interval)
 
-            anyoneStreaming = yield from self._bp.isAnyoneStreaming()
-            if anyoneStreaming:
+            if self._bp.isAnyoneStreaming():
                 self.log.info(
                     "at least one connection is streaming, camera is busy, cannot do motion detection")
                 continue
@@ -108,11 +112,16 @@ class MotionDetect(object):
                     nightMode = True
                     self.log.info(
                         "Image is too dark, will try in night mode next time")
+                    cv2.imwrite("/home/pi/toodark-%d.png" %
+                                time.time(), picture)
                     continue
                 if brightness == 1:
                     nightMode = False
                     self.log.info(
                         "Image is too bright, will try in day mode next time")
+                    cv2.imwrite("/home/pi/toobright-%d.png" %
+                                time.time(), picture)
+
                     continue
 
                 if oldPicture is not None:
@@ -127,26 +136,38 @@ class MotionDetect(object):
                     stddev = math.sqrt(
                         sum(map(lambda x: pow(abs(x - avg), 2), diffValues)) / float(len(diffValues)))
 
+                    moved = False
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
-                        cv2.putText(picture, datetime.now().strftime("%c"),
-                                    (3, 177),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.3,
-                                    (255, 255, 255),
-                                    lineType=cv2.LINE_AA)
-                        cv2.imwrite("/home/pi/%d.png" % time.time(), picture)
+                        moved = True
 
-                    # _, payload = cv2.imencode(".png", picture)
-                    # payload = base64.b64encode(payload.tobytes()).decode('utf-8')
+                        self._interval = 5
+                    else:
+                        self._interval = 20
 
                     yield from self._bp.broadcast({
                         "action": 'movement',
                         'value': movement,
-                        # 'image': payload,
+                        'moved': moved,
                     })
 
                 oldPicture = picture
+
+                # make a copy so we can modify it and save it
+                self.lastPicture = picture.copy()
+                self.lastPictureTimestamp = int(round(time.time(), 0))
+
+                # # annotate with date and time
+                # cv2.putText(self.lastPicture, datetime.now().strftime("%c"),
+                #             (3, 237),
+                #             cv2.FONT_HERSHEY_SIMPLEX,
+                #             0.3,
+                #             (255, 255, 255),
+                #             lineType=cv2.LINE_AA)
+                #
+                # # save it to disk
+                # cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
+
             except Exception as e:
                 self.log.info("Error taking picture: %s. Trying next time", e)
             finally:
