@@ -452,17 +452,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
 
-    // Called from native code when the size of the media changes or is first detected.
-// Inform the video surface about the new size and recalculate the layout.
-    fun onMediaSizeChanged(width: Int, height: Int) {
-//        Log.i("GStreamer", "Media size changed to " + width + "x" + height)
-//        val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
-//        gsv.media_width = width
-//        gsv.media_height = height
-//        runOnUiThread { gsv.requestLayout() }
-    }
-
-
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Inflate the menu; this adds items to the action bar if it is present.
         menuInflater.inflate(R.menu.menu_babyphone, menu)

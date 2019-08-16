@@ -12,18 +12,14 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.widget.Switch
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import java.lang.Exception
 
 
 class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
-
-    var player: Player? = null
 
     var url: String? = null
 
@@ -56,36 +52,6 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
 
         val vv = this.findViewById<View>(R.id.videoView) as SurfaceView
         vv.holder.addCallback(this)
-//        val lcBuilder = DefaultLoadControl.Builder()
-//        lcBuilder.setBackBuffer(1000, true)
-//        lcBuilder.setBufferDurationsMs(1000, 1000, 1000, 1000)
-//        val player = ExoPlayerFactory.newSimpleInstance(this, DefaultTrackSelector(), lcBuilder.createDefaultLoadControl())
-
-//        val vv = this.findViewById<View>(R.id.videoView) as PlayerView
-//        vv.setPlayer(player)
-
-//        val dataSourceFactory = DefaultDataSourceFactory(this,
-//                Util.getUserAgent(this, "yourApplicationName"))
-// This is the MediaSource representing the media to be played.
-//        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-//                .createMediaSource(Uri.parse("http://192.168.178.80:5000/stream.ts"))
-// Prepare the player with the source.
-//        player.prepare(videoSource)
-//        player.playWhenReady = true
-        // Bind the player to the view.
-        //playerView.setPlayer(player);
-
-//        try {
-//            this.player = Player(this)
-//        } catch (e: Exception) {
-//            Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
-//            finish()
-//            return
-//        }
-
-//        val sv = this.findViewById<View>(R.id.surface_video) as SurfaceView
-//        val sh = sv.holder
-//        sh.addCallback(this.player)
 
 
         val swtLights = this.findViewById<View>(R.id.btn_lights) as Switch
@@ -194,24 +160,12 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
         super.onPause()
         Log.i("Video", "onPause called")
         this.service?.lights = false
-        //val vv = this.findViewById<View>(R.id.videoView) as VideoView
-//        vv.stopPlayback()
-//        this.player?.pause()
-//        this.player?.destroy()
     }
 
     override fun onResume() {
         super.onResume()
         Log.i("Video", "onResume called")
-//        this.player?.initialize()
 
-//        val vv = this.findViewById<View>(R.id.videoView) as VideoView
-//        vv.setVideoURI(Uri.parse("http://192.168.178.72:5000/stream"))
-//        vv.setOnErrorListener( { mp, what, extra ->
-//            Log.e("videoview", "what: $what extra: $extra")
-//            false
-//        })
-//        vv.start()
         this.service?.lights = useLights
     }
 
@@ -274,29 +228,6 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
                 this.serviceBroadcastReceiver!!,
                 ConnectionService.createActionIntentFilter()
         )
-    }
-
-    // Called from native code when the size of the media changes or is first detected.
-    // Inform the video surface about the new size and recalculate the layout.
-    fun onMediaSizeChanged(width: Int, height: Int) {
-//        Log.i("GStreamer", "Media size changed to " + width + "x" + height)
-//        val gsv = this.findViewById<View>(R.id.surface_video) as GStreamerSurfaceView
-//        gsv.media_width = width
-//        gsv.media_height = height
-//        runOnUiThread { gsv.requestLayout() }
-    }
-
-    // Called from native code. This sets the content of the TextView from the UI thread.
-    fun setMessage(message: String) {
-        val tv = this.findViewById<View>(R.id.textview_message) as TextView
-        runOnUiThread { tv.text = message }
-    }
-
-    // Called from native code. Native code calls this once it has created its pipeline and
-    // the main loop is running, so it is ready to accept commands.
-    fun onGStreamerInitialized() {
-        Log.i("GStreamer", "GStreamer initialized:")
-        this.player?.play(createUrl(StreamMode.AudioVideo))
     }
 
     override fun onDestroy() {
