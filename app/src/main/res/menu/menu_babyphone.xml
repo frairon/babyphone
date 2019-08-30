@@ -1,10 +1,20 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    tools:context="babyphone.frosi.babyphone.Babyphone">
+    tools:context="babyphone.frosi.babyphone.Babyphone"
+    tools:ignore="AppCompatResource">
     <item
-        android:id="@+id/action_settings"
-        android:orderInCategory="100"
-        android:title="@string/action_settings"
+        android:id="@+id/action_edit"
+        android:title="edit"
+        app:showAsAction="ifRoom" />
+    <item
+        android:icon="@drawable/ic_favorite_black_24dp"
+        android:title="favourite"
+        app:showAsAction="ifRoom" />
+    <item
+        android:title="settings"
+        app:showAsAction="never" />
+    <item
+        android:title="help and feedback"
         app:showAsAction="never" />
 </menu>

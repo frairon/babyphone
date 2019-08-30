@@ -14,4 +14,7 @@
     <string name="switchConnect_Connected">Connected</string>
     <string name="title_activity_video">Video</string>
     <string name="lights">Lights</string>
+    <string name="title_activity_connect">Connect</string>
+    <string name="conn_motion_enabled">Motion Detection</string>
+    <string name="title_activity_devices">Devices</string>
 </resources>

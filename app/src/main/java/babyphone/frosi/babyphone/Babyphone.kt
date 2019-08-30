@@ -2,6 +2,7 @@ package babyphone.frosi.babyphone
 
 import android.content.*
 import android.graphics.Color
+import android.graphics.drawable.AnimationDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
@@ -13,12 +14,16 @@ import android.widget.*
 import androidx.annotation.UiThread
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.OnLifecycleEvent
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.viewpager.widget.ViewPager
+import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
@@ -57,7 +62,7 @@ class UiLifecycleScope : CoroutineScope, LifecycleObserver {
     fun destroy() = job.cancel()
 }
 
-class Babyphone : AppCompatActivity(), ServiceConnection {
+class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
 
     var service: ConnectionService? = null
@@ -78,53 +83,36 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
     private val imagePager = ImagePager(this)
 
+    private var deviceAddress: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        deviceAddress = intent.getStringExtra(EXTRA_DEVICE_ADDR)
+
         lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
         setContentView(R.layout.activity_babyphone)
-        //setSupportActionBar(toolbar)
+
+
+//        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
+        setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
+
+        val actionbar = getSupportActionBar()
+        if (actionbar != null) {
+            actionbar.setDisplayHomeAsUpEnabled(true)
+            actionbar.title = "Babyphone"
+        }
+
+//        val collapsingToolbar = findViewById<View>(R.id.collapsing_toolbar) as CollapsingToolbarLayout
+//        collapsingToolbar.title = getString(R.string.app_name)
+
+
         AndroidThreeTen.init(this);
 
         initVolumeGraph()
 
-        val componentName = this.startService(Intent(this, ConnectionService::class.java))
-        if (componentName == null) {
-            throw RuntimeException("Could not start connection service. does not exist")
-        }
-
         val activity = this
-
-        val connecting = activity.findViewById<View>(R.id.spinner_connecting) as ProgressBar
-        connecting.visibility = View.GONE
-        val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-        connect.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-                Log.i("websocket", "connecting to " + hostInput.text.toString())
-                this.service?.connectToHost(hostInput.text.toString())
-            } else {
-                this.disconnect()
-                connecting.visibility = View.GONE
-            }
-        }
-
-        val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
-        btnVideo.setOnClickListener {
-            val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-            this.startActivityForResult(Intent(this, Video::class.java)
-                    .putExtra("url", hostInput.text.toString())
-                    .putExtra("lights", useLights), VIDEO_ACTIVITY_REQ_CODE)
-        }
-
-        val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
-        btnShutdown.isEnabled = false
-        btnShutdown.setOnClickListener {
-            // disconnect before shutting down to avoid getting
-            // the disconnected-notification
-            this.service?.shutdown()
-            connect.isChecked = false
-        }
 
         val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
         setVolumeThresholdIcon()
@@ -148,6 +136,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
             activity.service?.autoVolumeLevel = isChecked
         }
 
+        this.findViewById<View>(R.id.hide_menu).setOnClickListener(this)
+
         val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
         volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
             volAlarmAuto.isEnabled = isChecked
@@ -163,6 +153,20 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+    }
+
+
+    override fun onClick(v: View?) {
+        if (v == null) {
+            return
+        }
+        when (v.id) {
+
+            R.id.hide_menu -> {
+                val abl = findViewById<View>(R.id.app_bar_layout) as AppBarLayout
+                abl.setExpanded(false)
+            }
+        }
     }
 
     override fun onStart() {
@@ -295,6 +299,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     companion object {
         val MAX_GRAPH_ELEMENTS = 120
         val VIDEO_ACTIVITY_REQ_CODE = 1
+        val EXTRA_DEVICE_ADDR = "io.frosi.babyphone.device.addr"
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -305,6 +310,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         if (this.service == null) {
             return
         }
+
+
+        this.service?.connectToHost(deviceAddress)
+
+
         this.setConnectionStatus(this.service!!.connectionState, true)
 
         this.initVolumeHistory()
@@ -338,38 +348,25 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     }
 
     fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
-        val btnShutdown = this.findViewById<View>(R.id.button_shutdown) as ImageButton
-        val connecting = this.findViewById<View>(R.id.spinner_connecting) as ProgressBar
-        val connect = this.findViewById<View>(R.id.switch_connection) as Switch
-        val btnVideo = this.findViewById<View>(R.id.btnVideo) as ImageButton
+
+        val actionbar = getSupportActionBar()!!
+
         when (state) {
             ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {
-                    connecting.visibility = View.VISIBLE
-                    btnShutdown.isEnabled = false
-//                    btnVideo.visibility = View.GONE
-                    connect.text = getString(R.string.switchConnect_Connecting)
-                    if (setButton) connect.isChecked = true
+                    actionbar.subtitle = "connecting to $deviceAddress..."
                 }
             }
             ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
-                    connecting.visibility = View.GONE
-                    btnVideo.visibility = View.VISIBLE
-                    btnShutdown.isEnabled = true
-                    connect.text = getString(R.string.switchConnect_Connected)
-                    if (setButton) connect.isChecked = true
+                    actionbar.subtitle = "connected to $deviceAddress"
                 }
 
                 loadAndShowImage()
             }
             ConnectionService.ConnectionState.Disconnected -> {
                 runOnUiThread {
-                    connecting.visibility = View.GONE
-//                    btnVideo.visibility = View.GONE
-                    btnShutdown.isEnabled = false
-                    connect.text = getString(R.string.switchConnect_Disconnected)
-                    if (setButton) connect.isChecked = false
+                    actionbar.subtitle = "disconnected"
                 }
             }
         }
@@ -379,13 +376,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
     fun handleConnnectionState(cu: ConnectionUpdated) {
         setConnectionStatus(cu.state)
     }
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    fun handleBabyphoneAdvertise(adv: Advertise) {
-        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-        hostInput.text = adv.host
-    }
-
 
     private fun connectToServiceBroadcast() {
         val activity = this
@@ -451,6 +441,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         }
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        if (menu == null) {
+            return super.onPrepareOptionsMenu(menu)
+        }
+        val mi = menu!!.findItem(R.id.action_edit) as MenuItem
+        if (x) {
+            mi.icon = ContextCompat.getDrawable(this, R.drawable.ic_headset_black_24dp)
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -458,37 +458,28 @@ class Babyphone : AppCompatActivity(), ServiceConnection {
         return true
     }
 
+    var x: Boolean = false
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         return when (item.itemId) {
-            R.id.action_settings -> true
+            R.id.action_edit -> {
+                x = !x
+                this.invalidateOptionsMenu()
+                val abl = findViewById<View>(R.id.app_bar_layout) as AppBarLayout
+                abl.setExpanded(true)
+                return true
+
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    override fun onBackPressed() {
-        if (this.isTaskRoot) {
-
-            if (lastExitPrompt == null || (Instant.now().toEpochMilli() - lastExitPrompt!!.toEpochMilli()) > 2000) {
-                Toast.makeText(this, "Tab again to exit Babyphone", Toast.LENGTH_SHORT).show()
-                this.lastExitPrompt = Instant.now()
-                return
-            }
-            this.finishAffinity()
-        }
-    }
-
-    private fun disconnect() {
-        this.service?.disconnect()
-    }
-
     override fun onDestroy() {
-        Log.i("babyphone", "babyphone on destroy")
-        this.disconnect()
+        Log.i("babyphone", "onDestroy")
         this.unbindService(this)
-        this.stopService(Intent(this, ConnectionService::class.java))
         lifecycle.removeObserver(uiScope)
 
         super.onDestroy()
