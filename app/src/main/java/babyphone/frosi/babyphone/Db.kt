@@ -49,7 +49,12 @@ data class Device(
         val hostname: String,
 
         val hostIp: String
-)
+) {
+    @Ignore
+    var active = false
+    @Ignore
+    var status = ConnectionService.ConnectionState.Disconnected
+}
 
 
 class DeviceRepository(private val deviceDao: DeviceDao) {
