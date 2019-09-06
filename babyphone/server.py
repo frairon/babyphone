@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 import argparse
+import asyncio
 import logging
 import signal
 import sys
 from datetime import datetime
 
-import asyncio
 import websockets
-from babyphone2 import babyphone, discovery
+from babyphone import babyphone, discovery
 
 loop = asyncio.get_event_loop()
 
@@ -55,8 +55,14 @@ def runWebserver(bp):
             },
         )
 
+    def imok(request):
+        return web.Response(
+            body="imok"
+            )
+
     app = web.Application()
     app.add_routes([web.get('/latest', latest)])
+    app.add_routes([web.get('/ruok', imok)])
 
     runner = web.AppRunner(app)
     logging.info("setup runner")

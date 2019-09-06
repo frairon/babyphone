@@ -16,7 +16,7 @@ import picamera
 import RPi.GPIO as gpio
 import websockets.exceptions
 
-from babyphone2 import motiondetect
+from babyphone import motiondetect
 
 
 class InvalidMessageException(Exception):
@@ -129,22 +129,23 @@ class Babyphone(object):
     def _startAudioMonitoring(self, event):
         try:
             log.debug("initializing Alsa PCM device")
-            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='plughw:CARD=Device')
-            inp.setchannels(1)
-            inp.setrate(8000)
-            inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-            inp.setperiodsize(160)
+            inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='dmic_sv')
+            inp.setchannels(2)
+            inp.setrate(48000)
+            inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
+            inp.setperiodsize(320)
             log.debug("...initialization done")
 
-            maxRms = (1<<15)-1 # only 15 because it's signed
+            maxRms = (1<<31)-1 # only 15 because it's signed
             lastSent = time.time()
             while not event.is_set():
                 l, data = inp.read()
 
                 if l:
                     try:
-                        data = audioop.mul(data, 2, 4)
-                        rms = audioop.rms(data, 2)
+                        data = audioop.tomono(data, 4, 1, 1)
+                        data = audioop.mul(data, 4, 4)
+                        rms = audioop.rms(data, 4)
 
                         if time.time() - lastSent >= 0.5:
                             level = float(rms) / float(maxRms)
@@ -152,7 +153,8 @@ class Babyphone(object):
                             asyncio.run_coroutine_threadsafe(self.broadcast({'action': 'volume',
                                                      'volume': level,
                                                      }), loop=self._loop)
-                    except audioop.error:
+                    except audioop.error as e:
+                        log.debug("error in audioop %s. continuing..." % str(e))
                         continue
 
         except (asyncio.CancelledError, CancelledError) as e:
@@ -237,13 +239,27 @@ class Babyphone(object):
         self.cam.close()
         gpio.cleanup()
 
+    @asyncio.coroutine
     def shutdown(self, conn):
         log.info("Shutting down machine as requested by %s", str(conn))
-        self.broadcast({
-            "action": "status_update",
-            "status": "shutting-down"
+        yield from self.broadcast({
+            "action": "systemstatus",
+            "status": "shutdown"
         })
+        # give the clients 2 seconds to disconnect
+        yield from asyncio.sleep(2)
         subprocess.check_call(['sudo', 'shutdown', '-h', '0'])
+
+    @asyncio.coroutine
+    def restart(self, conn):
+        log.info("Restarting machine as requested by %s", str(conn))
+        yield from self.broadcast({
+            "action": "systemstatus",
+            "status": "restart"
+        })
+        # give the clients 2 seconds to disconnect
+        yield from asyncio.sleep(2)
+        subprocess.check_call(['sudo', 'shutdown', '-r', '0'])
 
     @asyncio.coroutine
     def connect(self, websocket, path):
@@ -336,7 +352,9 @@ class Connection(object):
             raise InvalidMessageException("action not in message")
 
         if msg['action'] == 'shutdown':
-            self.bp.shutdown(self)
+            yield from self.bp.shutdown(self)
+        elif msg['action'] == 'restart':
+            yield from self.bp.restart(self)
         elif msg['action'] == 'startstream':
             self.state = self.STREAMING
         elif msg['action'] == 'stopstream':

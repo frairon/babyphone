@@ -44,6 +44,7 @@ try:
 
             if l:
                 data = audioop.tomono(data, 4, 1, 1)
+                data = audioop.mul(data, 4, 4)
                 avg = audioop.rms(data, 4)
                 # p = False
                 # avg = math.sqrt(avg)
