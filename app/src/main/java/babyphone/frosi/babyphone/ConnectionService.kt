@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.*
 import android.provider.Settings
+import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -19,7 +20,6 @@ import com.codebutler.android_websockets.WebSocketClient
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import org.json.JSONException
 import org.json.JSONObject
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
@@ -163,12 +163,15 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     private val mBinder = ConnectionServiceBinder()
     private var mWebSocketClient: WebSocketClient? = null
 
-    private val discovery = Discovery()
-
     private var heartbeat: HeartbeatWatcher = HeartbeatWatcher(::vibrate)
 
 
-    private var currentHost: String? = null
+    var currentDevice: Device? = null
+        get() = field
+        private set(value) {
+            field = value
+        }
+
     var volumeThreshold: Int = 50
     val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
 
@@ -189,17 +192,17 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     var autoVolumeLevel: Boolean = false
 
     fun getMotionUrl(): String? {
-        if (currentHost == null || currentHost == "") {
+        if (currentDevice == null || currentDevice?.hostname == "") {
             return null
         }
-        return "http://$currentHost:8081/latest"
+        return "http://${currentDevice?.hostname}:8081/latest"
     }
 
     var connectionState: ConnectionState = ConnectionState.Disconnected
         private set(value) {
             Log.d(TAG, "Setting connection state $value")
             field = value
-            EventBus.getDefault().post(ConnectionUpdated(value))
+            EventBus.getDefault().post(ConnectionStateUpdated(value, currentDevice))
         }
 
     enum class ConnectionState(val action: String) {
@@ -245,19 +248,19 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         }
     }
 
-    fun connectToHost(host: String) {
-        this.currentHost = host
-        Log.i(TAG, "configuring websocket-uri ${this.currentHost}")
+    fun connect(device: Device, reconnect: Boolean = true) {
+        this.currentDevice = device
+        Log.i(TAG, "configuring websocket-uri ${this.currentDevice?.hostname}")
 
         this.startForeground()
         this.heartbeat.start()
 
-        startSocket(reconnect = true)
+        startSocket(reconnect)
     }
 
     fun disconnect() {
         Log.i(TAG, "service disconnect requested")
-        this.currentHost = ""
+        this.currentDevice = null
         this.stopForeground(true)
         stopSocket()
         this.heartbeat.stop()
@@ -267,12 +270,17 @@ class ConnectionService : Service(), WebSocketClient.Listener {
     }
 
     private fun shouldConnect(): Boolean {
-        return this.currentHost != ""
+        return this.currentDevice != null
     }
+
+    var mRunning = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onstartcommand")
-
+        if (mRunning) {
+            Log.i(TAG, "service already running")
+        }
+        mRunning = true
         return START_STICKY
     }
 
@@ -281,7 +289,12 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         val data = JSONObject();
         data.put("action", "shutdown");
         this.mWebSocketClient?.send(data.toString())
-        this.disconnect()
+    }
+
+    fun restart() {
+        val data = JSONObject();
+        data.put("action", "restart");
+        this.mWebSocketClient?.send(data.toString())
     }
 
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
@@ -329,18 +342,15 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "onDestroy")
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mMessageReceiver)
         stopForeground(true)
-        currentHost = ""
+        currentDevice = null
         stopSocket()
         stopSelf()
         EventBus.getDefault().unregister(this)
-        discovery.stop()
         super.onDestroy()
     }
 
     @Subscribe(threadMode = ThreadMode.POSTING)
     fun onStreamAction(sa: StreamAction) {
-        sa.action
-
         val data = JSONObject();
         if (sa.action == StreamAction.Action.Start) {
             data.put("action", "_startstream");
@@ -355,10 +365,6 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         Log.i(TAG, "onCreate")
         EventBus.getDefault().register(this)
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, IntentFilter(ConnectionService.ACTION_NETWORK_STATE_CHANGED))
-
-        discovery.start()
-        EventBus.getDefault().post(Discover())
-//        discovery.discover()
     }
 
     override fun onConnect() {
@@ -416,6 +422,14 @@ class ConnectionService : Service(), WebSocketClient.Listener {
                         type,
                         partial
                 ))
+            }
+            "systemstatus" -> {
+                val status = parsed.optString("status")
+                when (status) {
+                    "shutdown" -> disconnect()
+                    "restart" -> {
+                    } // do nothing on restart, we'll just try to reconnect
+                }
             }
             else ->
                 Log.d(TAG, "unhandled message " + parsed)
@@ -528,14 +542,14 @@ class ConnectionService : Service(), WebSocketClient.Listener {
 
     private fun startSocket(reconnect: Boolean = false) {
         Log.d(TAG, "startSocket")
-        if (this.currentHost == null) {
+        if (this.currentDevice == null) {
             Log.i(TAG, "No host configured. Will not attempt to connect")
             return
         }
         if (mWebSocketClient != null) {
             if (reconnect) {
                 Log.d(TAG, "socket exists, will disconnect first")
-                mWebSocketClient!!.disconnect()
+                this.disconnect()
             } else {
                 Log.i(TAG, "already connected, not restarting socket.")
                 return
@@ -543,7 +557,7 @@ class ConnectionService : Service(), WebSocketClient.Listener {
         }
 
 
-        mWebSocketClient = WebSocketClient(URI.create("ws://$currentHost:8080"), this, null)
+        mWebSocketClient = WebSocketClient(URI.create("ws://${currentDevice?.hostname}:8080"), this, null)
         mWebSocketClient!!.connect()
 
         connectionState = ConnectionState.Connecting

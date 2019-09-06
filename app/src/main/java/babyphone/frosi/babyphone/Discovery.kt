@@ -2,8 +2,6 @@ package babyphone.frosi.babyphone
 
 import android.util.Log
 import org.greenrobot.eventbus.EventBus
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
 import org.json.JSONObject
 import java.net.*
 import kotlin.concurrent.thread
@@ -19,17 +17,12 @@ class Discovery {
         thread {
             run()
         }
-
-
-        EventBus.getDefault().register(this)
-
     }
 
-    fun stop(){
+    fun stop() {
         Log.i("discovery", "disconnecting socket")
         socket.disconnect()
         socket.close()
-        EventBus.getDefault().unregister(this)
     }
 
     fun run() {
@@ -45,20 +38,19 @@ class Discovery {
                     val adv = Advertise(parsed.optString("host"))
                     EventBus.getDefault().post(adv)
                 }
-            }catch(se : SocketException){
+            } catch (se: SocketException) {
                 Log.i("discovery", "got SocketException " + se.localizedMessage)
 
                 if (socket.isConnected) {
                     Thread.sleep(1000)
-                }else {
+                } else {
                     return
                 }
             }
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.BACKGROUND)
-    fun discover(discover:Discover) {
+    fun discover() {
         val d = JSONObject()
         d.put("action", "discover")
         val data = d.toString().toByteArray(Charsets.UTF_8)

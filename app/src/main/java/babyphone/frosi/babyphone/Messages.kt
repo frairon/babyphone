@@ -1,6 +1,7 @@
 package babyphone.frosi.babyphone
 
-class ConnectionUpdated(val state: ConnectionService.ConnectionState)
+class ConnectionStateUpdated(val state: ConnectionService.ConnectionState,
+                             val device: Device?)
 
 class VideoFrame(val data: ByteArray,
                  val offset: Int,
@@ -20,18 +21,20 @@ class VideoFrame(val data: ByteArray,
 }
 
 class StreamAction(val action: Action) {
-    enum class Action(val value:Int) {
+    enum class Action(val value: Int) {
         Start(0),
         Stop(1);
+
         companion object {
             private val map = Action.values().associateBy(Action::value)
             fun fromInt(type: Int) = map.getValue(type)
         }
     }
 }
+
 class Discover {
 
 }
 
-class Advertise(val host:String){
+class Advertise(val host: String) {
 }

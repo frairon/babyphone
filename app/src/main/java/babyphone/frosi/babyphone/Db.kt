@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.WorkerThread
 import androidx.lifecycle.LiveData
 import androidx.room.*
+import org.threeten.bp.Instant
 
 
 @Database(entities = arrayOf(Device::class), version = 1)
@@ -49,11 +50,25 @@ data class Device(
         val hostname: String,
 
         val hostIp: String
+
 ) {
     @Ignore
-    var active = false
-    @Ignore
-    var status = ConnectionService.ConnectionState.Disconnected
+    var alive = false
+
+    fun isAlive(): String {
+        return when (alive) {
+            true -> "ALIVE"
+            false -> "NOT ALIVE"
+        }
+    }
+
+    class Comparator : kotlin.Comparator<Device> {
+        override fun compare(o1: Device?, o2: Device?): Int {
+            return -1
+            TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        }
+
+    }
 }
 
 

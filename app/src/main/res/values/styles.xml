@@ -1,18 +1,28 @@
 <resources>
 
     <style name="BabyphoneMain" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorPrimary">@color/color_primary</item>
-        <item name="colorPrimaryVariant">@color/color_primary_variant</item>
-        <item name="colorSecondary">@color/color_secondary</item>
-        <item name="colorSecondaryVariant">@color/color_secondary_variant</item>
-        <item name="colorSurface">@color/color_surface</item>
+<!--        <item name="colorPrimary">@color/color_primary</item>-->
+<!--        <item name="colorPrimaryVariant">@color/color_primary_variant</item>-->
+<!--        <item name="colorSecondary">@color/color_secondary</item>-->
+<!--        <item name="colorSecondaryVariant">@color/color_secondary_variant</item>-->
+<!--        <item name="colorSurface">@color/color_surface</item>-->
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+
     </style>
 
     <style name="AppbarIconButton" parent="Widget.AppCompat.ImageButton">
         <item name="android:background">@android:color/transparent</item>
     </style>
+
+    <style name="IconOnlyButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="rippleColor">@android:color/transparent</item>
+        <item name="android:shadowColor">@android:color/transparent</item>
+        <item name="strokeColor">@android:color/transparent</item>
+        <item name="android:minWidth">0dp</item>
+    </style>s
 
     <style name="BabyphoneMain.NewConnection">
         <item name="android:windowIsTranslucent">true</item>

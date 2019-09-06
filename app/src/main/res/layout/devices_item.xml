@@ -2,15 +2,6 @@
 
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <data>
-
-        <import type="android.view.View" />
-
-        <variable
-            name="device"
-            type="babyphone.frosi.babyphone.Device" />
-    </data>
-
     <com.google.android.material.card.MaterialCardView xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
         style="@style/Widget.MaterialComponents.CardView"
@@ -62,7 +53,7 @@
                 android:layout_margin="8dp"
                 android:layout_marginStart="8dp"
                 android:layout_marginTop="8dp"
-                android:text="@{device.hostIp}"
+                android:text="@{device.isAlive()}"
                 android:textAppearance="@android:style/TextAppearance.Material.Body2"
                 app:layout_constraintStart_toEndOf="@+id/textView4"
                 app:layout_constraintTop_toTopOf="parent" />
@@ -79,7 +70,7 @@
                 app:layout_constraintTop_toBottomOf="@+id/textView3" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_monitor"
+                android:id="@+id/btn_connect"
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -100,10 +91,19 @@
                 android:layout_marginStart="8dp"
                 android:text="Delete"
                 app:icon="@drawable/ic_delete_black_24dp"
-                app:layout_constraintStart_toEndOf="@+id/btn_monitor"
+                app:layout_constraintStart_toEndOf="@+id/btn_connect"
                 app:layout_constraintTop_toBottomOf="@+id/textView4" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
     </com.google.android.material.card.MaterialCardView>
+
+    <data>
+
+        <import type="android.view.View" />
+
+        <variable
+            name="device"
+            type="babyphone.frosi.babyphone.Device" />
+    </data>
 </layout>

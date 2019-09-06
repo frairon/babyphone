@@ -2,7 +2,6 @@ package babyphone.frosi.babyphone
 
 import android.content.*
 import android.graphics.Color
-import android.graphics.drawable.AnimationDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
@@ -15,7 +14,6 @@ import androidx.annotation.UiThread
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
@@ -23,7 +21,6 @@ import androidx.lifecycle.OnLifecycleEvent
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
@@ -67,7 +64,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     var service: ConnectionService? = null
 
-    private var lastExitPrompt: Instant? = null
     private var volumeSeries = LineGraphSeries<DataPoint>()
     private var thresholdSeries = LineGraphSeries<DataPoint>()
     private var alarmSeries = PointsGraphSeries<DataPoint>()
@@ -83,12 +79,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     private val imagePager = ImagePager(this)
 
-    private var deviceAddress: String = ""
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        deviceAddress = intent.getStringExtra(EXTRA_DEVICE_ADDR)
 
         lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
@@ -311,10 +303,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             return
         }
 
-
-        this.service?.connectToHost(deviceAddress)
-
-
         this.setConnectionStatus(this.service!!.connectionState, true)
 
         this.initVolumeHistory()
@@ -349,17 +337,17 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
 
-        val actionbar = getSupportActionBar()!!
+        val actionbar = supportActionBar!!
 
         when (state) {
             ConnectionService.ConnectionState.Connecting -> {
                 runOnUiThread {
-                    actionbar.subtitle = "connecting to $deviceAddress..."
+                    actionbar.subtitle = "connecting to..."
                 }
             }
             ConnectionService.ConnectionState.Connected -> {
                 runOnUiThread {
-                    actionbar.subtitle = "connected to $deviceAddress"
+                    actionbar.subtitle = "connected to "
                 }
 
                 loadAndShowImage()
@@ -373,7 +361,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     @Subscribe(threadMode = ThreadMode.POSTING)
-    fun handleConnnectionState(cu: ConnectionUpdated) {
+    fun handleConnnectionState(cu: ConnectionStateUpdated) {
         setConnectionStatus(cu.state)
     }
 

@@ -1,117 +1,69 @@
 package babyphone.frosi.babyphone
 
 import android.app.Activity
-import android.app.Application
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import android.text.TextUtils
 import android.util.Log
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.widget.Toolbar
 import androidx.databinding.DataBindingUtil
-import androidx.lifecycle.*
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.RecyclerView
-
-import kotlinx.android.synthetic.main.activity_devices.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
 import babyphone.frosi.babyphone.databinding.DevicesItemBinding
-import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.android.synthetic.main.activity_devices.*
 import kotlinx.android.synthetic.main.devices_current.*
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
-
-class DeviceViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: DeviceRepository
-
-    val allDevices: LiveData<List<Device>>
-
-    val disconnectedDevices = MutableLiveData<List<Device>>()
-
-    val activeDevice = MutableLiveData<Device>()
-
-    init {
-        repository = DeviceRepository(DeviceDatabase.getDatabase(application).deviceDao())
-        allDevices = repository.allDevices
-        allDevices.observeForever { updateDisconnectedDevices() }
-        activeDevice.observeForever { updateDisconnectedDevices() }
-        updateDisconnectedDevices()
-    }
-
-
-    private fun updateDisconnectedDevices() {
-        disconnectedDevices.postValue(allDevices.value?.filter { x -> x != activeDevice.value })
-    }
-
-    fun insert(device: Device) = viewModelScope.launch(Dispatchers.IO) {
-        repository.insert(device)
-    }
-
-    fun delete(device: Device) = viewModelScope.launch(Dispatchers.IO) {
-        repository.delete(device)
-    }
-
-    fun setActiveDevice(device: Device?) {
-        Log.i("viewmodel", "setting device $device")
-        activeDevice.postValue(device)
-    }
-}
-
-class DeviceViewModelFactory(val application: Application) : ViewModelProvider.Factory {
-
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return DeviceViewModel(application) as T
-    }
-}
 
 class DeviceListAdapter internal constructor(
-        context: Context,
+        val context: Devices,
         private val model: DeviceViewModel
 ) : RecyclerView.Adapter<DeviceListAdapter.DeviceViewHolder>() {
-    private val ctx = context
     private val inflater: LayoutInflater = LayoutInflater.from(context)
     private var devices = emptyList<Device>() // Cached copy of devices
 
-    inner class DeviceViewHolder(val binding: DevicesItemBinding) : RecyclerView.ViewHolder(binding.root) {
-        val hostname = itemView.findViewById(R.id.hostname) as TextView
-        val ip = itemView.findViewById(R.id.ip) as TextView
-        val btnConnect = itemView.findViewById(R.id.btn_monitor) as MaterialButton
-        val btnDelete = itemView.findViewById(R.id.btn_delete) as MaterialButton
+    inner class DeviceViewHolder(val binding: DevicesItemBinding) : RecyclerView.ViewHolder(binding.root), View.OnClickListener {
+
+        init {
+            itemView.findViewById<View>(R.id.btn_connect).setOnClickListener(this)
+            itemView.findViewById<View>(R.id.btn_delete).setOnClickListener(this)
+        }
+
+        override fun onClick(v: View?) {
+            val device = devices.get(this.getAdapterPosition())
+            when (v?.id) {
+                R.id.btn_connect -> {
+                    context.connectToDevice(device)
+                }
+                R.id.btn_delete -> {
+                    model.delete(device)
+                }
+            }
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
-        val binding = DataBindingUtil.inflate< DevicesItemBinding>(inflater, R.layout.devices_item, parent, false)
+        val binding = DataBindingUtil.inflate<DevicesItemBinding>(inflater, R.layout.devices_item, parent, false)
         return DeviceViewHolder(binding)
     }
 
     override fun onBindViewHolder(holder: DeviceViewHolder, position: Int) {
         val current = devices[position]
         holder.binding.device = current
-//        holder.hostname.text = current.hostname
-//        holder.ip.text = current.hostIp
-
-        holder.btnConnect.setOnClickListener {
-            model.setActiveDevice(current)
-
-            //            val intent = Intent(ctx, Babyphone::class.java)
-//            intent.putExtra(Babyphone.EXTRA_DEVICE_ADDR, holder.hostname.text.toString().trim())
-//            ctx.startActivity(intent)
-        }
-        holder.btnDelete.setOnClickListener {
-            model.delete(current)
-        }
     }
 
     internal fun setDevices(devices: List<Device>) {
@@ -135,6 +87,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Log.i("devices", "oncreate")
 
         devicesViewModel = ViewModelProviders
                 .of(this, DeviceViewModelFactory(this.application))
@@ -147,6 +100,8 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         this.btn_disconnect.setOnClickListener(this)
         this.btn_monitor.setOnClickListener(this)
+        this.btn_menu.setOnClickListener(this)
+        this.fab.setOnClickListener(this)
 
         val adapter = DeviceListAdapter(this, devicesViewModel)
         val recyclerView = findViewById<RecyclerView>(R.id.devices_list)
@@ -156,45 +111,111 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             devices?.let { adapter.setDevices(it) }
         })
 
-        create_connection.setOnClickListener { view ->
-            this.startActivityForResult(Intent(this, NewConnection::class.java),
-                    newConnectionActivityRequestCode)
-        }
-
-
         val componentName = this.startService(Intent(this, ConnectionService::class.java))
         if (componentName == null) {
             throw RuntimeException("Could not start connection service. does not exist")
         }
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
+
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        getMenuInflater().inflate(R.menu.menu_devices, menu);
+        return true;
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?): Boolean {
+        when (item?.itemId) {
+            R.id.action_exit -> {
+                this.exit()
+            }
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onResume() {
+        super.onResume()
+           Log.i("devices", "onresume")
+        devicesViewModel.discover()
+    }
+
+    override fun onPause() {
+        super.onPause()
     }
 
     override fun onClick(v: View?) {
         when (v?.id) {
             R.id.btn_disconnect -> {
-                devicesViewModel.setActiveDevice(null)
+                service?.disconnect()
+            }
+            R.id.btn_monitor -> {
+                val intent = Intent(this, Babyphone::class.java)
+                intent.putExtra(Babyphone.EXTRA_DEVICE_ADDR, devicesViewModel.activeDevice.value?.hostname)
+                this.startActivity(intent)
+            }
+            R.id.btn_menu -> {
+                val popup = PopupMenu(this, v)
+                val inflater = popup.menuInflater
+                inflater.inflate(R.menu.popup_active_conn, popup.menu)
+                popup.show()
+                popup.setOnMenuItemClickListener { v ->
+                    when (v?.itemId) {
+                        R.id.action_shutdown -> {
+                            service?.shutdown()
+                            true
+                        }
+                        R.id.action_restart -> {
+                            Toast.makeText(this, "Not implemented", Toast.LENGTH_SHORT)
+                            service?.restart()
+                            true
+                        }
+                    }
+                    false
+                }
+            }
+            R.id.fab -> {
+                this.startActivityForResult(Intent(this, NewConnection::class.java),
+                        newConnectionActivityRequestCode)
             }
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    fun handleBabyphoneAdvertise(adv: Advertise) {
-        // TODO create a new element
-//        val hostInput = this.findViewById<View>(R.id.text_host) as TextView
-//        hostInput.text = adv.host
+    fun connectToDevice(device: Device) {
+
+        val doConnect = {
+            devicesViewModel.activeDevice.postValue(device)
+            service?.connect(device)
+        }
+        if (devicesViewModel.activeDevice.value != null ||
+                devicesViewModel.connectionState.value != ConnectionService.ConnectionState.Disconnected) {
+
+            MaterialAlertDialogBuilder(this)
+                    .setTitle("Active Connection")
+                    .setMessage("Another connection is already active. This will be terminated. Continue?")
+                    .setPositiveButton("Ok") { _, _ ->
+                        doConnect()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        } else {
+            doConnect()
+        }
+
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
         Log.i("devices", "service connected")
-        this.service = (service as ConnectionService.ConnectionServiceBinder).service
+        val svc = (service as ConnectionService.ConnectionServiceBinder).service
 
-        if (this.service == null) {
+        if (svc == null) {
             return
         }
+        devicesViewModel.serviceConnected(svc)
+        this.service = svc
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        this.service = null
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -215,13 +236,15 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     override fun onDestroy() {
-
-        Log.i("device", "onDestroy")
-        this.service?.disconnect()
+        Log.i("devices", "onDestroy")
         this.unbindService(this)
-        this.stopService(Intent(this, ConnectionService::class.java))
-
         super.onDestroy()
+    }
+
+    private fun exit() {
+        this.service?.disconnect()
+        this.stopService(Intent(this, ConnectionService::class.java))
+        this.finishAffinity()
     }
 }
 
@@ -236,6 +259,7 @@ class NewConnection : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.activity_new_connection)
 
         val hostName = findViewById(R.id.host_name) as TextView
