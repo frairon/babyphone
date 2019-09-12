@@ -13,7 +13,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.Toolbar
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProviders
@@ -23,10 +22,6 @@ import babyphone.frosi.babyphone.databinding.DevicesItemBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.android.synthetic.main.activity_devices.*
 import kotlinx.android.synthetic.main.devices_current.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 
 
 class DeviceListAdapter internal constructor(
@@ -135,7 +130,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     override fun onResume() {
         super.onResume()
-           Log.i("devices", "onresume")
+        Log.i("devices", "onresume")
         devicesViewModel.discover()
     }
 
@@ -161,12 +156,12 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 popup.setOnMenuItemClickListener { v ->
                     when (v?.itemId) {
                         R.id.action_shutdown -> {
-                            service?.shutdown()
+                            service?.conn?.shutdown()
                             true
                         }
                         R.id.action_restart -> {
                             Toast.makeText(this, "Not implemented", Toast.LENGTH_SHORT)
-                            service?.restart()
+                            service?.conn?.restart()
                             true
                         }
                     }
@@ -182,23 +177,19 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     fun connectToDevice(device: Device) {
 
-        val doConnect = {
-            devicesViewModel.activeDevice.postValue(device)
-            service?.connect(device)
-        }
         if (devicesViewModel.activeDevice.value != null ||
-                devicesViewModel.connectionState.value != ConnectionService.ConnectionState.Disconnected) {
+                devicesViewModel.connectionState.value != DeviceConnection.ConnectionState.Disconnected) {
 
             MaterialAlertDialogBuilder(this)
                     .setTitle("Active Connection")
                     .setMessage("Another connection is already active. This will be terminated. Continue?")
-                    .setPositiveButton("Ok") { _, _ ->
-                        doConnect()
+                    .setPositiveButton("Yes") { _, _ ->
+                        service?.connect(device, true)
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton("No", null)
                     .show();
         } else {
-            doConnect()
+            service?.connect(device)
         }
 
     }
@@ -210,7 +201,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         if (svc == null) {
             return
         }
-        devicesViewModel.serviceConnected(svc)
+        devicesViewModel.connectService(svc)
         this.service = svc
     }
 

@@ -303,7 +303,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             return
         }
 
-        this.setConnectionStatus(this.service!!.connectionState, true)
+//        this.setConnectionStatus(this.service!!.connectionState, true)
 
         this.initVolumeHistory()
 
@@ -319,15 +319,15 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         if (this.service == null) {
             return
         }
-
-        val alarmPoints = this.service!!.history.alarms.map { it -> DataPoint(Date(it.toEpochMilli()), 0.0) }
-        this.alarmSeries.resetData(alarmPoints.toTypedArray())
-
-        val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
-        this.volumeSeries.resetData(dataPoints.toTypedArray())
-
-        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
-        this.movementSeries.resetData(movementPoints.toTypedArray())
+//
+//        val alarmPoints = this.service!!.history.alarms.map { it -> DataPoint(Date(it.toEpochMilli()), 0.0) }
+//        this.alarmSeries.resetData(alarmPoints.toTypedArray())
+//
+//        val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
+//        this.volumeSeries.resetData(dataPoints.toTypedArray())
+//
+//        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
+//        this.movementSeries.resetData(movementPoints.toTypedArray())
 
         val graph = this.findViewById(R.id.graph_volume) as GraphView?
 
@@ -335,35 +335,35 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         graph?.viewport?.setMaxX(volumeSeries.highestValueX)
     }
 
-    fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
+//    fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
+//
+//        val actionbar = supportActionBar!!
+//
+//        when (state) {
+//            ConnectionService.ConnectionState.Connecting -> {
+//                runOnUiThread {
+//                    actionbar.subtitle = "connecting to..."
+//                }
+//            }
+//            ConnectionService.ConnectionState.Connected -> {
+//                runOnUiThread {
+//                    actionbar.subtitle = "connected to "
+//                }
+//
+//                loadAndShowImage()
+//            }
+//            ConnectionService.ConnectionState.Disconnected -> {
+//                runOnUiThread {
+//                    actionbar.subtitle = "disconnected"
+//                }
+//            }
+//        }
+//    }
 
-        val actionbar = supportActionBar!!
-
-        when (state) {
-            ConnectionService.ConnectionState.Connecting -> {
-                runOnUiThread {
-                    actionbar.subtitle = "connecting to..."
-                }
-            }
-            ConnectionService.ConnectionState.Connected -> {
-                runOnUiThread {
-                    actionbar.subtitle = "connected to "
-                }
-
-                loadAndShowImage()
-            }
-            ConnectionService.ConnectionState.Disconnected -> {
-                runOnUiThread {
-                    actionbar.subtitle = "disconnected"
-                }
-            }
-        }
-    }
-
-    @Subscribe(threadMode = ThreadMode.POSTING)
-    fun handleConnnectionState(cu: ConnectionStateUpdated) {
-        setConnectionStatus(cu.state)
-    }
+//    @Subscribe(threadMode = ThreadMode.POSTING)
+//    fun handleConnnectionState(cu: ConnectionStateUpdated) {
+//        setConnectionStatus(cu.state)
+//    }
 
     private fun connectToServiceBroadcast() {
         val activity = this

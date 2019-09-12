@@ -9,36 +9,30 @@ import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import java.io.IOException
-import java.io.InputStream
-import java.net.URL
-import android.icu.lang.UCharacter.GraphemeClusterBreak.T
-import java.net.HttpURLConnection
 
 
 class DeviceViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: DeviceRepository
-
     val allDevices: LiveData<List<Device>>
 
     val disconnectedDevices = MutableLiveData<List<Device>>()
 
     val activeDevice = MutableLiveData<Device>()
 
-    val connectionState = MutableLiveData<ConnectionService.ConnectionState>()
+    val connectionState = MutableLiveData<DeviceConnection.ConnectionState>()
 
-    var service: ConnectionService? = null
+    private var service: ConnectionService? = null
 
+    private val repository: DeviceRepository = DeviceRepository(DeviceDatabase.getDatabase(application).deviceDao())
 
     private val discovery = Discovery()
 
 
     init {
-        repository = DeviceRepository(DeviceDatabase.getDatabase(application).deviceDao())
         allDevices = repository.allDevices
         allDevices.observeForever {
             discover()
-            updateDisconnectedDevices() }
+            updateDisconnectedDevices()
+        }
         activeDevice.observeForever {
             discover()
             updateDisconnectedDevices()
@@ -47,23 +41,22 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         updateDisconnectedDevices()
 
         // default is disconnected
-        connectionState.value = ConnectionService.ConnectionState.Disconnected
+        connectionState.value = DeviceConnection.ConnectionState.Disconnected
 
         discovery.start()
     }
 
 
-    fun serviceConnected(service: ConnectionService) {
+    fun connectService(service: ConnectionService) {
         this.service = service
 
-        this.setActiveDevice(service.currentDevice)
-        this.setConnectionState(service.connectionState)
+//        this.setActiveDevice(service.currentDevice)
+//        this.setConnectionState(service.connectionState)
     }
 
-    fun discover(){
-
+    fun discover() {
         // start recovery every time we go back to the activity somehow
-        viewModelScope.launch(Dispatchers.IO){
+        viewModelScope.launch(Dispatchers.IO) {
             discovery.discover()
         }
 
@@ -84,27 +77,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         repository.delete(device)
     }
 
-    fun pingDevices() {
+    private fun pingDevices() {
         allDevices.value?.forEach { dev ->
             viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    Log.i("model", "pinging ${dev.hostname}")
-                    val url = URL("http://${dev.hostname}:8081/ruok")
-                    val conn = url.openConnection() as HttpURLConnection
-                    conn.connectTimeout = 500
-                    conn.connect()
-                    val code = conn.getResponseCode()
-                    dev.alive = code == 200 && conn.getContent().toString() == "imok"
-                } catch (e: IOException) {
-                    dev.alive = false
-                } finally {
-                    updateDisconnectedDevices()
-                }
+                dev.alive = this@DeviceViewModel.discovery.checkHostIsAlive(dev.hostname)
+                updateDisconnectedDevices()
             }
         }
     }
 
-    fun setActiveDevice(device: Device?) {
+    private fun setActiveDevice(device: Device?) {
         Log.i("viewmodel", "setting device $device")
         activeDevice.postValue(device)
     }
@@ -117,7 +99,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         setConnectionState(cu.state)
     }
 
-    fun setConnectionState(state: ConnectionService.ConnectionState) {
+    fun setConnectionState(state: DeviceConnection.ConnectionState) {
         connectionState.postValue(state)
         pingDevices()
     }

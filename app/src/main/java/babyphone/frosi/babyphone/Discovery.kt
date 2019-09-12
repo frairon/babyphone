@@ -3,6 +3,7 @@ package babyphone.frosi.babyphone
 import android.util.Log
 import org.greenrobot.eventbus.EventBus
 import org.json.JSONObject
+import java.io.IOException
 import java.net.*
 import kotlin.concurrent.thread
 
@@ -59,7 +60,7 @@ class Discovery {
         socket.send(DatagramPacket(data, data.size, addr, 31634))
     }
 
-    fun getBroadcast(): InetAddress {
+    private fun getBroadcast(): InetAddress {
         System.setProperty("java.net.preferIPv4Stack", "true")
         val niEnum = NetworkInterface.getNetworkInterfaces()
         while (niEnum.hasMoreElements()) {
@@ -74,6 +75,19 @@ class Discovery {
             }
         }
         return InetAddress.getByAddress("255.255.255.255".toByteArray())
+    }
+
+    fun checkHostIsAlive(hostname: String): Boolean {
+        try {
+            val url = URL("http://$hostname:8081/ruok")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 200
+            conn.connect()
+            val code = conn.getResponseCode()
+            return code == 200 && conn.getContent().toString() == "imok"
+        } catch (e: IOException) {
+            return false
+        }
     }
 
 }
