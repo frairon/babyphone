@@ -145,7 +145,6 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             }
             R.id.btn_monitor -> {
                 val intent = Intent(this, Babyphone::class.java)
-                intent.putExtra(Babyphone.EXTRA_DEVICE_ADDR, devicesViewModel.activeDevice.value?.hostname)
                 this.startActivity(intent)
             }
             R.id.btn_menu -> {
@@ -184,12 +183,12 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                     .setTitle("Active Connection")
                     .setMessage("Another connection is already active. This will be terminated. Continue?")
                     .setPositiveButton("Yes") { _, _ ->
-                        service?.connect(device, true)
+                        devicesViewModel.connectDevice(device)
                     }
                     .setNegativeButton("No", null)
                     .show();
         } else {
-            service?.connect(device)
+            devicesViewModel.connectDevice(device)
         }
 
     }

@@ -2,8 +2,8 @@ package babyphone.frosi.babyphone
 
 import android.app.Application
 import android.text.TextUtils
-import android.util.Log
 import androidx.lifecycle.*
+import io.reactivex.disposables.CompositeDisposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
@@ -26,6 +26,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private val discovery = Discovery()
 
+    private var disposables = CompositeDisposable()
 
     init {
         allDevices = repository.allDevices
@@ -46,12 +47,31 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         discovery.start()
     }
 
+    fun connectDevice(device: Device) {
+        service?.connect(device, true)
+        this.activeDevice.postValue(device)
+    }
+
 
     fun connectService(service: ConnectionService) {
         this.service = service
 
+        disposables.add(service.connections.subscribe { conn -> this.updateConnection(conn) })
+
+
 //        this.setActiveDevice(service.currentDevice)
 //        this.setConnectionState(service.connectionState)
+    }
+
+    private fun updateConnection(conn: DeviceConnection) {
+        // clear subscribers of old connection, if any
+        disposables.clear()
+        disposables = CompositeDisposable()
+
+        // wire to the new connection
+        disposables.add(conn.connectionState.subscribe { n -> this.connectionState.postValue(n) })
+        disposables.add(conn.connectionState.subscribe { n -> pingDevices() })
+        this.activeDevice.postValue(conn.device)
     }
 
     fun discover() {
@@ -86,24 +106,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun setActiveDevice(device: Device?) {
-        Log.i("viewmodel", "setting device $device")
-        activeDevice.postValue(device)
-    }
-
-    @Subscribe(threadMode = ThreadMode.BACKGROUND)
-    fun onConnectionStateUpdated(cu: ConnectionStateUpdated) {
-        if (cu.device != activeDevice.value) {
-            activeDevice.postValue(cu.device)
-        }
-        setConnectionState(cu.state)
-    }
-
-    fun setConnectionState(state: DeviceConnection.ConnectionState) {
-        connectionState.postValue(state)
-        pingDevices()
-    }
-
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun handleBabyphoneAdvertise(adv: Advertise) {
@@ -126,6 +128,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         super.onCleared()
         discovery.stop()
+        disposables.clear()
         EventBus.getDefault().unregister(this)
     }
 }

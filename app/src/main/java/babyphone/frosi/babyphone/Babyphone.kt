@@ -335,11 +335,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         graph?.viewport?.setMaxX(volumeSeries.highestValueX)
     }
 
-//    fun setConnectionStatus(state: ConnectionService.ConnectionState, setButton: Boolean = false) {
+//    fun setConnectionStatus(proxyState: ConnectionService.ConnectionState, setButton: Boolean = false) {
 //
 //        val actionbar = supportActionBar!!
 //
-//        when (state) {
+//        when (proxyState) {
 //            ConnectionService.ConnectionState.Connecting -> {
 //                runOnUiThread {
 //                    actionbar.subtitle = "connecting to..."
@@ -362,7 +362,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
 //    @Subscribe(threadMode = ThreadMode.POSTING)
 //    fun handleConnnectionState(cu: ConnectionStateUpdated) {
-//        setConnectionStatus(cu.state)
+//        setConnectionStatus(cu.proxyState)
 //    }
 
     private fun connectToServiceBroadcast() {

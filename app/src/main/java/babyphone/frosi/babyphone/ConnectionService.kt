@@ -10,9 +10,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.tinder.scarlet.Lifecycle
-import com.tinder.scarlet.ShutdownReason
-import com.tinder.scarlet.lifecycle.LifecycleRegistry
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.subjects.BehaviorSubject
 import org.greenrobot.eventbus.EventBus
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
@@ -107,54 +106,13 @@ class History(private val maxSize: Int) {
     }
 }
 
-//class HeartbeatWatcher() {
-//
-//    private var handler = Handler()
-//
-//    private var lastBeat: Instant = Instant.now()
-//    private var alarmSkip: Duration = Duration.ofMillis(3000)
-//
-//    private var running: Boolean = false
-//
-//    fun start() {
-//        running = true
-//        lastBeat = Instant.now()
-//        schedule()
-//    }
-//
-//    private fun schedule() {
-//        handler.postDelayed({
-//            check()
-//        }, 20000)
-//    }
-//
-//    private fun check() {
-//        // stopped while we were sleeping
-//        if (!running) {
-//            return
-//        }
-//
-//        if (Duration.between(lastBeat, Instant.now()) > alarmSkip) {
-//            notifier(arrayOf(0, 150L, 150L, 150L).toLongArray())
-//        }
-//        // schedule to run again
-//        schedule()
-//    }
-//
-//    fun heartbeat() {
-//        lastBeat = Instant.now()
-//    }
-//
-//    fun stop() {
-//        running = false
-//    }
-//}
-
 class ConnectionService : Service() {
 
     private val mBinder = ConnectionServiceBinder()
 
     var conn: DeviceConnection? = null
+
+    val connections = BehaviorSubject.create<DeviceConnection>()
 
     var volumeThreshold: Int = 50
 
@@ -190,18 +148,29 @@ class ConnectionService : Service() {
     }
 
     fun connect(device: Device, reconnect: Boolean = true) {
-        this.conn = DeviceConnection(device)
+
+        // stop old connection if any
+        this.stopConnection()
+        val conn = DeviceConnection(device)
+        this.connections.onNext(conn)
+        this.conn = conn
+
         Log.i(TAG, "configuring websocket-uri ${this.conn?.device?.hostname}")
 
         this.startForeground()
 
     }
 
+    private fun stopConnection() {
+        val oldConn = this.conn ?: return
+        oldConn.disconnect()
+        this.conn = null
+    }
+
     fun disconnect() {
         Log.i(TAG, "service disconnect requested")
         this.stopForeground(true)
-        this.conn!!.disconnect()
-        this.conn = null
+        this.stopConnection()
 
         Log.i(TAG, "removing notification")
         NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
@@ -350,9 +319,9 @@ class ConnectionService : Service() {
             val filter = IntentFilter()
             filter.addAction(ACTION_VOLUME_RECEIVED)
             filter.addAction(ACTION_MOVEMENT_RECEIVED)
-            filter.addAction(DeviceConnection.ConnectionState.Disconnected.action)
-            filter.addAction(DeviceConnection.ConnectionState.Connected.action)
-            filter.addAction(DeviceConnection.ConnectionState.Connecting.action)
+//            filter.addAction(DeviceConnection.ConnectionState.Disconnected.action)
+//            filter.addAction(DeviceConnection.ConnectionState.Connected.action)
+//            filter.addAction(DeviceConnection.ConnectionState.Connecting.action)
             filter.addAction(ACTION_MSG_RECEIVED)
             filter.addAction(ACTION_ALARM_TRIGGERED)
             filter.addAction(ACTION_AUTOTHRESHOLD_UPDATED)

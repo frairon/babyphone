@@ -24,6 +24,7 @@ import org.json.JSONObject
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+
 class ConnectionLifecycle(
         private val lifecycleRegistry: LifecycleRegistry = LifecycleRegistry()
 ) : Lifecycle by lifecycleRegistry {
@@ -66,16 +67,23 @@ class DeviceConnection(val device: Device,
         }
     }
 
-    private val hbWatcher = Observable.interval(20, 20, TimeUnit.SECONDS, schedProvider.computation())
-    //    private val history = History(Babyphone.MAX_GRAPH_ELEMENTS)
-
     val volumes: Observable<Volume>
-    private val movements = ReplaySubject.createWithTimeAndSize<Movement>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
+    val movements: Observable<Movement>
     private val alarms = ReplaySubject.createWithTimeAndSize<Alarm>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
 
     val systemStatus: Observable<DeviceOperation>
 
-    private val missingHeartbeat: Observable<Long>
+    val missingHeartbeat: Observable<Long>
+
+
+    var connectionState: Observable<ConnectionState>
+
+    enum class ConnectionState {
+        Disconnected,
+        Connecting,
+        Connected
+    }
+
 
     private val disposables = CompositeDisposable()
 
@@ -108,42 +116,37 @@ class DeviceConnection(val device: Device,
         socket = socketFactory(device, connLifecycle)
         Log.d(TAG, "after creating socket")
 
-        disposables.add(socket.observeWebSocketEvent().subscribe { data ->
+        connectionState = socket.observeWebSocketEvent()
+                .filter { data ->
+                    data is WebSocket.Event.OnConnectionClosed
+                            || data is WebSocket.Event.OnConnectionClosing
+                            || data is WebSocket.Event.OnConnectionFailed
+                            || data is WebSocket.Event.OnConnectionOpened<*>
+                }
+                .map { data ->
+                    Log.i(TAG, "received event ${data.toString()}")
+                    when (data) {
+                        is WebSocket.Event.OnConnectionClosed -> ConnectionState.Disconnected
+                        is WebSocket.Event.OnConnectionClosing -> ConnectionState.Disconnected
+                        is WebSocket.Event.OnConnectionFailed -> ConnectionState.Disconnected
+                        else -> ConnectionState.Connected
+                    }
+                }.startWith(ConnectionState.Connecting)
+                .replay(1).autoConnect()
 
-            Log.i(TAG, "received event ${data.toString()}")
-            when (data) {
-                is WebSocket.Event.OnConnectionClosed -> {
-                    connectionState = ConnectionState.Disconnected
-                }
-                is WebSocket.Event.OnConnectionClosing -> {
-                    connectionState = ConnectionState.Disconnected
-                }
-                is WebSocket.Event.OnConnectionFailed -> {
-                    connectionState = ConnectionState.Disconnected
-                }
-                is WebSocket.Event.OnConnectionOpened<*> -> {
-                    connectionState = ConnectionState.Connected
-                }
-            }
-        })
         disposables.add(socket.observeActions().subscribe { m -> Log.i(TAG, "receiving ${m.toString()}") })
         Log.i(TAG, "observing to actions")
-        val volConnector = socket.observeActions()
+        volumes = socket.observeActions()
                 .filter { a -> a.action == "volume" }
                 .map { a -> Volume(Date(), (a.volume * 100.0).toInt()) }
                 .replay(1000, 300, TimeUnit.SECONDS, schedProvider.computation())
-        volConnector.connect()
-        volumes = volConnector
+                .autoConnect()
 
-        socket.observeActions()
+        movements = socket.observeActions()
                 .filter { a -> a.action == "movement" }
                 .map { a -> Movement(Date(), (a.value * 100.0).toInt()) }
-                .sorted { o1, o2 -> o1.time.compareTo(o2.time) }.subscribe(movements)
-
-        disposables.add(socket.observeActions()
-                .filter { a -> a.action == "heartbeat" }
-                .forEach { hb -> }
-        )
+                .replay(1000, 300, TimeUnit.SECONDS, schedProvider.computation())
+                .autoConnect()
 
         missingHeartbeat = socket.observeActions()
                 .filter { a -> a.action == "heartbeat" }
@@ -158,31 +161,8 @@ class DeviceConnection(val device: Device,
                         else -> DeviceOperation.Invalid
                     }
                 }
-    }
 
 
-    var connectionState: ConnectionState = ConnectionState.Connecting
-        private set(value) {
-            Log.d(TAG, "Setting connection state $value")
-            field = value
-            EventBus.getDefault().post(ConnectionStateUpdated(value, device))
-        }
-
-    enum class ConnectionState(val action: String) {
-        Disconnected("disconnected"),
-        Connecting("connecting"),
-        Connected("connected");
-
-        companion object {
-            fun findState(action: String): ConnectionState? {
-                for (value: ConnectionState in ConnectionState.values()) {
-                    if (value.action == action) {
-                        return value
-                    }
-                }
-                return null
-            }
-        }
     }
 
     fun disconnect() {

@@ -57,6 +57,7 @@ dependencies {
     implementation "com.tinder.scarlet:message-adapter-moshi:$scarlet_version"
     implementation "com.tinder.scarlet:stream-adapter-rxjava2:$scarlet_version"
     implementation "androidx.lifecycle:lifecycle-reactivestreams:$lifecycle_version"
+    implementation "android.arch.lifecycle:reactivestreams:1.1.1"
     implementation "com.squareup.okhttp3:okhttp:4.2.0"
     implementation "com.squareup.okhttp3:mockwebserver:4.2.0"
 
