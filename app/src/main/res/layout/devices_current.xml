@@ -110,7 +110,7 @@
 
         <variable
             name="deviceViewModel"
-            type="babyphone.frosi.babyphone.DeviceViewModel" />
+            type="babyphone.frosi.babyphone.models.DeviceViewModel" />
     </data>
 
 

@@ -32,8 +32,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
@@ -84,7 +82,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         lifecycle.addObserver(uiScope)
         Log.i("connection-service", "connection service creating")
-        setContentView(R.layout.activity_babyphone)
+        setContentView(R.layout.activity_monitor)
 
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
@@ -106,42 +104,42 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         val activity = this
 
-        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-        setVolumeThresholdIcon()
-        volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                activity.service?.volumeThreshold = volumeSeek.progress
-
-                activity.setGraphThreshold(progress)
-
-                activity.setVolumeThresholdIcon()
-            }
-        })
-        setGraphThreshold(volumeSeek.progress)
-
-        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-        volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
-            volumeSeek.isEnabled = !isChecked
-            activity.service?.autoVolumeLevel = isChecked
-        }
-
-        this.findViewById<View>(R.id.hide_menu).setOnClickListener(this)
-
-        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
-        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
-            volAlarmAuto.isEnabled = isChecked
-            volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
-            this.service?.alarmsEnabled = isChecked
-        }
-        val viewPager = this.findViewById<View>(R.id.imagePager) as ViewPager
-        viewPager.adapter = imagePager
-
-        volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
-        volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
-        activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
+//        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+//        setVolumeThresholdIcon()
+//        volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+//            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+//            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+//
+//            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+//                activity.service?.volumeThreshold = volumeSeek.progress
+//
+//                activity.setGraphThreshold(progress)
+//
+//                activity.setVolumeThresholdIcon()
+//            }
+//        })
+//        setGraphThreshold(volumeSeek.progress)
+//
+//        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
+//        volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
+//            volumeSeek.isEnabled = !isChecked
+//            activity.service?.autoVolumeLevel = isChecked
+//        }
+//
+//        this.findViewById<View>(R.id.hide_menu).setOnClickListener(this)
+//
+//        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
+//        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
+//            volAlarmAuto.isEnabled = isChecked
+//            volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
+//            this.service?.alarmsEnabled = isChecked
+//        }
+//        val viewPager = this.findViewById<View>(R.id.images) as ViewPager
+//        viewPager.adapter = imagePager
+//
+//        volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
+//        volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
+//        activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
 
         connectToServiceBroadcast()
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
@@ -163,12 +161,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     override fun onStart() {
         super.onStart()
-        EventBus.getDefault().register(this)
     }
 
     override fun onStop() {
         super.onStop()
-        EventBus.getDefault().unregister(this)
     }
 
     class TimedDrawable(val drawable: Drawable, val instant: Instant)
@@ -181,7 +177,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 if (timedImage != null) {
                     uiScope.launch {
                         displayMotionImage(timedImage)
-                        val viewPager = findViewById<View>(R.id.imagePager) as ViewPager
+                        val viewPager = findViewById<View>(R.id.images) as ViewPager
                         Log.d("babyphone", "updating current view pager item to " + imagePager.getCount())
                         viewPager.setCurrentItem(imagePager.getCount(), true)
                     }

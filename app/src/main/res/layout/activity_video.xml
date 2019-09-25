@@ -42,13 +42,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_marginRight="8dp"
-                app:layout_constraintBottom_toBottomOf="@+id/videoView"
+                app:layout_constraintBottom_toBottomOf="@+id/liveVideo"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 tools:layout_editor_absoluteY="355dp" />
 
             <SurfaceView
-                android:id="@+id/videoView"
+                android:id="@+id/liveVideo"
                 android:layout_width="wrap_content"
                 android:layout_height="240dip"
                 android:layout_marginStart="8dp"

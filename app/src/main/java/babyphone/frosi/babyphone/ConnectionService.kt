@@ -10,9 +10,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.subjects.BehaviorSubject
-import org.greenrobot.eventbus.EventBus
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
 import java.io.Serializable
@@ -111,6 +109,7 @@ class ConnectionService : Service() {
     private val mBinder = ConnectionServiceBinder()
 
     var conn: DeviceConnection? = null
+
 
     val connections = BehaviorSubject.create<DeviceConnection>()
 
@@ -226,7 +225,6 @@ class ConnectionService : Service() {
         stopForeground(true)
         this.conn?.disconnect()
         stopSelf()
-        EventBus.getDefault().unregister(this)
         super.onDestroy()
     }
 
@@ -241,11 +239,6 @@ class ConnectionService : Service() {
 //        Log.i(TAG, "sending to socket" + data.toString())
 //        this.conn?.mWebSocketClient?.send(data.toString())
 //    }
-
-    override fun onCreate() {
-        Log.i(TAG, "onCreate")
-        EventBus.getDefault().register(this)
-    }
 
 
     private fun vibrate(pattern: LongArray) {

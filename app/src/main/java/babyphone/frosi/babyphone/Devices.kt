@@ -19,6 +19,8 @@ import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.RecyclerView
 import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
 import babyphone.frosi.babyphone.databinding.DevicesItemBinding
+import babyphone.frosi.babyphone.models.DeviceViewModel
+import babyphone.frosi.babyphone.models.DeviceViewModelFactory
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.android.synthetic.main.activity_devices.*
 import kotlinx.android.synthetic.main.devices_current.*

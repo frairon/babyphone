@@ -1,8 +1,9 @@
-package babyphone.frosi.babyphone
+package babyphone.frosi.babyphone.models
 
 import android.app.Application
 import android.text.TextUtils
 import androidx.lifecycle.*
+import babyphone.frosi.babyphone.*
 import io.reactivex.disposables.CompositeDisposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,10 +58,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         this.service = service
 
         disposables.add(service.connections.subscribe { conn -> this.updateConnection(conn) })
-
-
-//        this.setActiveDevice(service.currentDevice)
-//        this.setConnectionState(service.connectionState)
     }
 
     private fun updateConnection(conn: DeviceConnection) {

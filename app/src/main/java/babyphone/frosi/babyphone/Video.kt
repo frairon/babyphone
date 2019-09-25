@@ -50,7 +50,7 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
         url = intent.getStringExtra("url")
 
 
-        val vv = this.findViewById<View>(R.id.videoView) as SurfaceView
+        val vv = this.findViewById<View>(R.id.liveVideo) as SurfaceView
         vv.holder.addCallback(this)
 
 
