@@ -1,104 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+<layout xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <SurfaceView
-        android:id="@+id/liveVideo"
-        android:layout_width="0dp"
-        android:layout_height="240dp"
-        android:layout_marginLeft="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginRight="8dp"
-        android:layout_marginBottom="8dp"
-        android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-
-    <androidx.viewpager.widget.ViewPager
-        android:id="@+id/images"
-        android:layout_width="0dp"
-        android:layout_height="240dp"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="8dp"
-        android:visibility="invisible"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <View
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginBottom="8dp"
-        android:layout_marginStart="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="@id/btn_live"
-        android:background="#B4DDDDDD"
-        />
+        android:layout_height="wrap_content">
 
+        <SurfaceView
+            android:id="@+id/liveVideo"
+            android:layout_width="0dp"
+            android:layout_height="240dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="@{model.livePicture ? View.VISIBLE: View.GONE}"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+
+        <androidx.viewpager.widget.ViewPager
+            android:id="@+id/images"
+            android:layout_width="0dp"
+            android:layout_height="240dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toTopOf="@id/btn_live"
+            android:background="#B4DDDDDD"
+            />
+
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_refresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="refresh"
+                android:layout_marginBottom="8dp"
+                android:layout_marginStart="16dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
+                android:theme="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                app:icon="@drawable/ic_refresh_black_24dp" />
+
+            <ProgressBar
+                android:id="@+id/prog_refresh_timeout"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
+                app:layout_constraintEnd_toEndOf="@id/btn_refresh"
+                app:layout_constraintTop_toTopOf="@id/btn_refresh"
+                app:layout_constraintStart_toStartOf="@id/btn_refresh"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_marginTop="2dp"
+                android:elevation="10dp"
+                android:progress="25" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_refresh"
+            android:id="@+id/btn_live"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="refresh"
-            android:layout_marginBottom="8dp"
-            android:layout_marginStart="16dp"
-            app:layout_constraintStart_toStartOf="parent"
+            android:text="@{model.livePicture ? R.string.monitor_btn_live_stop : R.string.monitor_btn_live_live}"
             app:layout_constraintBottom_toBottomOf="parent"
-            android:theme="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            app:icon="@drawable/ic_refresh_black_24dp" />
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            app:icon="@drawable/ic_videocam_black_24dp" />
 
-        <ProgressBar
-            android:id="@+id/prog_refresh_timeout"
-            style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/no_video"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            app:layout_constraintEnd_toEndOf="@id/btn_refresh"
-            app:layout_constraintTop_toTopOf="@id/btn_refresh"
-            app:layout_constraintStart_toStartOf="@id/btn_refresh"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:layout_marginTop="2dp"
-            android:elevation="2dp"
-            android:progress="25" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_live"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="live"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="8dp"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="8dp"
-        app:icon="@drawable/ic_videocam_black_24dp" />
-
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/no_video"
-        android:layout_width="0dp"
-        android:layout_height="240dp"
-        android:layout_marginLeft="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginRight="8dp"
-        android:layout_marginBottom="8dp"
-        android:background="@android:color/darker_gray"
-        android:scaleType="center"
-        android:src="@drawable/ic_broken_image_black_24dp"
-        android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+            android:layout_height="240dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginRight="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@android:color/darker_gray"
+            android:scaleType="center"
+            android:src="@drawable/ic_broken_image_black_24dp"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <data>
+
+        <import type="android.view.View" />
+        <import type="babyphone.frosi.babyphone.R" />
+
+        <variable
+            name="model"
+            type="babyphone.frosi.babyphone.models.MonitorViewModel" />
+    </data>
+
+
+</layout>

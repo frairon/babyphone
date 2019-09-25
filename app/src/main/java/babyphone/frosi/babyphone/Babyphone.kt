@@ -9,17 +9,24 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.widget.*
+import android.widget.SeekBar
+import android.widget.Switch
 import androidx.annotation.UiThread
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.OnLifecycleEvent
+import androidx.lifecycle.ViewModelProviders
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.viewpager.widget.ViewPager
+import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
+import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
+import babyphone.frosi.babyphone.models.MonitorViewModel
+import babyphone.frosi.babyphone.models.MonitorViewModelFactory
 import com.google.android.material.appbar.AppBarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
@@ -27,11 +34,12 @@ import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
+import kotlinx.android.synthetic.main.conn_details.*
+import kotlinx.android.synthetic.main.monitor_picture.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import org.greenrobot.eventbus.EventBus
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
@@ -77,12 +85,22 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     private val imagePager = ImagePager(this)
 
+    private lateinit var model: MonitorViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        model = ViewModelProviders
+                .of(this, MonitorViewModelFactory(this.application))
+                .get(MonitorViewModel::class.java)
         lifecycle.addObserver(uiScope)
-        Log.i("connection-service", "connection service creating")
-        setContentView(R.layout.activity_monitor)
+        // create the layout and bind the model to it
+        val binding = DataBindingUtil.setContentView<ActivityMonitorBinding>(this, R.layout.activity_monitor)
+        binding.model = model
+        binding.lifecycleOwner = this
+
+        this.btn_live.setOnClickListener(this)
+        this.hide_menu.setOnClickListener(this)
 
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
@@ -126,8 +144,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //            activity.service?.autoVolumeLevel = isChecked
 //        }
 //
-//        this.findViewById<View>(R.id.hide_menu).setOnClickListener(this)
-//
 //        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
 //        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
 //            volAlarmAuto.isEnabled = isChecked
@@ -155,6 +171,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             R.id.hide_menu -> {
                 val abl = findViewById<View>(R.id.app_bar_layout) as AppBarLayout
                 abl.setExpanded(false)
+            }
+            R.id.btn_live -> {
+                val live = this.model?.livePicture.value
+                if (live != null) {
+                    this.model?.livePicture.postValue(!live)
+                }
             }
         }
     }

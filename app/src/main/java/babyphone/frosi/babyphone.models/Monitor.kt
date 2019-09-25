@@ -3,6 +3,9 @@ package babyphone.frosi.babyphone.models
 import android.app.Application
 import android.content.BroadcastReceiver
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import babyphone.frosi.babyphone.ConnectionService
 import babyphone.frosi.babyphone.ImagePager
 import babyphone.frosi.babyphone.UiLifecycleScope
@@ -15,7 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 
 
-class MonitorModel(application: Application) : AndroidViewModel(application) {
+class MonitorViewModel(application: Application) : AndroidViewModel(application) {
 
     var service: ConnectionService? = null
 
@@ -24,6 +27,8 @@ class MonitorModel(application: Application) : AndroidViewModel(application) {
     private var alarmSeries = PointsGraphSeries<DataPoint>()
     private var movementSeries = PointsGraphSeries<DataPoint>()
     private var useLights: Boolean = false
+
+    val livePicture = MutableLiveData<Boolean>()
 
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
@@ -34,11 +39,22 @@ class MonitorModel(application: Application) : AndroidViewModel(application) {
 
     private var disposables = CompositeDisposable()
 
+    init {
+        livePicture.value = false
+    }
+
 //    private val imagePager = ImagePager(this)
 
     fun connectService(service: ConnectionService) {
         this.service = service
 
         // TODO do the wiring
+    }
+}
+
+class MonitorViewModelFactory(val application: Application) : ViewModelProvider.Factory {
+
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return MonitorViewModel(application) as T
     }
 }

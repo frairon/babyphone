@@ -17,4 +17,6 @@
     <string name="title_activity_connect">Connect</string>
     <string name="conn_motion_enabled">Motion Detection</string>
     <string name="title_activity_devices">Devices</string>
+    <string name="monitor_btn_live_live">live</string>
+    <string name="monitor_btn_live_stop">stop</string>
 </resources>
