@@ -34,6 +34,7 @@ import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
+import io.reactivex.disposables.CompositeDisposable
 import kotlinx.android.synthetic.main.conn_details.*
 import kotlinx.android.synthetic.main.monitor_picture.*
 import kotlinx.coroutines.CoroutineScope
@@ -70,12 +71,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     var service: ConnectionService? = null
 
-    private var volumeSeries = LineGraphSeries<DataPoint>()
-    private var thresholdSeries = LineGraphSeries<DataPoint>()
-    private var alarmSeries = PointsGraphSeries<DataPoint>()
-    private var movementSeries = PointsGraphSeries<DataPoint>()
-    private var useLights: Boolean = false
-
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
     private val loaderJob = Job()
@@ -86,6 +81,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     private val imagePager = ImagePager(this)
 
     private lateinit var model: MonitorViewModel
+
+    private val disposables = CompositeDisposable()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -240,9 +237,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         when (requestCode) {
             VIDEO_ACTIVITY_REQ_CODE -> {
-                if (data != null) {
-                    useLights = data.getBooleanExtra("lights", false)
-                }
+//                if (data != null) {
+//                    useLights = data.getBooleanExtra("lights", false)
+//                }
             }
         }
     }
@@ -260,42 +257,47 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         }
     }
 
-    fun setGraphThreshold(threshold: Int) {
-        this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold.toDouble()), DataPoint(Double.MAX_VALUE, threshold.toDouble())))
-    }
+//    fun setGraphThreshold(threshold: Int) {
+//        this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold.toDouble()), DataPoint(Double.MAX_VALUE, threshold.toDouble())))
+//    }
 
-    fun initVolumeGraph() {
+    private fun initVolumeGraph() {
         val graph = findViewById(R.id.graph_volume) as GraphView
 
-        graph.addSeries(this.volumeSeries)
-        graph.addSeries(this.thresholdSeries)
-        graph.addSeries(this.alarmSeries)
-        graph.addSeries(this.movementSeries)
+        graph.addSeries(this.model.volumeSeries)
+        graph.addSeries(this.model.thresholdSeries)
+        graph.addSeries(this.model.alarmSeries)
+        graph.addSeries(this.model.movementSeries)
 
-        this.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
-        this.alarmSeries.color = Color.MAGENTA
+        this.model.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
+        this.model.alarmSeries.color = Color.MAGENTA
 
-        this.movementSeries.shape = PointsGraphSeries.Shape.POINT
-        this.movementSeries.color = Color.DKGRAY
-        this.movementSeries.size = 5F
+        this.model.movementSeries.shape = PointsGraphSeries.Shape.POINT
+        this.model.movementSeries.color = Color.DKGRAY
+        this.model.movementSeries.size = 5F
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
-        this.volumeSeries.thickness = 4
+        this.model.volumeSeries.thickness = 4
 
 
-        this.thresholdSeries.color = Color.RED
-        this.thresholdSeries.thickness = 2
+        this.model.thresholdSeries.color = Color.RED
+        this.model.thresholdSeries.thickness = 2
         val vp = graph.viewport
-        vp.isScrollable = true
-        vp.isScalable = true
+        vp.isScrollable = false
+        vp.isScalable = false
         vp.isXAxisBoundsManual = true
         vp.isYAxisBoundsManual = true
         vp.setMinY(0.0)
         vp.setMaxY(100.0)
-        vp.setMinX(this.volumeSeries.lowestValueX)
-        vp.setMaxX(this.volumeSeries.highestValueX)
+        vp.setMinX(this.model.volumeSeries.lowestValueX)
+        vp.setMaxX(this.model.volumeSeries.highestValueX)
 
-        graph.getGridLabelRenderer().setNumHorizontalLabels(3)
+        disposables.add(this.model.volumeUpdated.subscribe { vol ->
+            graph.viewport.setMinX(this.model.volumeSeries.lowestValueX)
+            graph.viewport.setMaxX(this.model.volumeSeries.highestValueX)
+        })
+
+        graph.gridLabelRenderer.numHorizontalLabels = 3
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
@@ -321,22 +323,24 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             return
         }
 
+        this.model.connectService(this.service!!)
+
 //        this.setConnectionStatus(this.service!!.connectionState, true)
 
-        this.initVolumeHistory()
+//        this.initVolumeHistory()
 
-        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-        volumeSeek.progress = this.service!!.volumeThreshold
-        this.setGraphThreshold(volumeSeek.progress)
+//        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
+//        volumeSeek.progress = this.service!!.volumeThreshold
+//        this.setGraphThreshold(volumeSeek.progress)
 
-        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-        this.service!!.autoVolumeLevel = volAlarmAuto.isChecked
+//        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
+//        this.service!!.autoVolumeLevel = volAlarmAuto.isChecked
     }
 
-    fun initVolumeHistory() {
-        if (this.service == null) {
-            return
-        }
+//    fun initVolumeHistory() {
+//        if (this.service == null) {
+//            return
+//        }
 //
 //        val alarmPoints = this.service!!.history.alarms.map { it -> DataPoint(Date(it.toEpochMilli()), 0.0) }
 //        this.alarmSeries.resetData(alarmPoints.toTypedArray())
@@ -347,11 +351,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
 //        this.movementSeries.resetData(movementPoints.toTypedArray())
 
-        val graph = this.findViewById(R.id.graph_volume) as GraphView?
-
-        graph?.viewport?.setMinX(volumeSeries.lowestValueX)
-        graph?.viewport?.setMaxX(volumeSeries.highestValueX)
-    }
+//        val graph = this.findViewById(R.id.graph_volume) as GraphView?
+//
+//        graph?.viewport?.setMinX(model.volumeSeries.lowestValueX)
+//        graph?.viewport?.setMaxX(model.volumeSeries.highestValueX)
+//    }
 
 //    fun setConnectionStatus(proxyState: ConnectionService.ConnectionState, setButton: Boolean = false) {
 //
@@ -389,14 +393,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.serviceBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
-                    ConnectionService.ACTION_VOLUME_RECEIVED -> {
-                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_VOLUME) as Point?
-                        if (vol == null) {
-                            Log.e("babyphone", "Receivd null volume in volume intent. Ignoring.")
-                            return
-                        }
-                        activity.addVolumeToGraph(vol)
-                    }
                     ConnectionService.ACTION_MOVEMENT_RECEIVED -> {
                         val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_MOVEMENT) as Point?
                         if (vol == null) {
@@ -404,16 +400,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                             return
                         }
 
-                        activity.addMovementToGraph(vol)
+//                        activity.addMovementToGraph(vol)
 
                         loadAndShowImage()
                     }
                     ConnectionService.ACTION_ALARM_TRIGGERED -> {
-                        activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
+//                        activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
                     }
                     ConnectionService.ACTION_AUTOTHRESHOLD_UPDATED -> {
                         val volume = intent.getIntExtra(ConnectionService.ACTION_EXTRA_VOLUME, 50)
-                        setGraphThreshold(volume)
+//                        setGraphThreshold(volume)
                         val volumeSeek = activity.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
                         volumeSeek.progress = volume
                     }
@@ -430,22 +426,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
 
-    fun addVolumeToGraph(vol: Point) {
-        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
-        runOnUiThread {
-            volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
-            val graph = this.findViewById(R.id.graph_volume) as GraphView
-            graph.viewport.setMinX(volumeSeries.lowestValueX)
-            graph.viewport.setMaxX(volumeSeries.highestValueX)
-        }
-    }
-
-    fun addMovementToGraph(vol: Point) {
-        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
-        runOnUiThread {
-            movementSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
-        }
-    }
+//    fun addMovementToGraph(vol: Point) {
+//        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
+//        runOnUiThread {
+//            movementSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
+//        }
+//    }
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         if (menu == null) {
@@ -487,6 +473,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         Log.i("babyphone", "onDestroy")
         this.unbindService(this)
         lifecycle.removeObserver(uiScope)
+
+        disposables.clear()
 
         super.onDestroy()
     }

@@ -6,27 +6,30 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import babyphone.frosi.babyphone.ConnectionService
-import babyphone.frosi.babyphone.ImagePager
-import babyphone.frosi.babyphone.UiLifecycleScope
+import babyphone.frosi.babyphone.*
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
+import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.subjects.PublishSubject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import org.greenrobot.eventbus.EventBus
+import java.util.concurrent.TimeUnit
 
 
 class MonitorViewModel(application: Application) : AndroidViewModel(application) {
 
     var service: ConnectionService? = null
 
-    private var volumeSeries = LineGraphSeries<DataPoint>()
-    private var thresholdSeries = LineGraphSeries<DataPoint>()
-    private var alarmSeries = PointsGraphSeries<DataPoint>()
-    private var movementSeries = PointsGraphSeries<DataPoint>()
-    private var useLights: Boolean = false
+    val volumeSeries = LineGraphSeries<DataPoint>()
+    val volumeUpdated = PublishSubject.create<Volume>()
+    val thresholdSeries = LineGraphSeries<DataPoint>()
+    val alarmSeries = PointsGraphSeries<DataPoint>()
+    val movementSeries = PointsGraphSeries<DataPoint>()
+    val useLights: Boolean = false
 
     val livePicture = MutableLiveData<Boolean>()
 
@@ -49,6 +52,43 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         this.service = service
 
         // TODO do the wiring
+
+        disposables.add(service.connections.subscribe { conn ->
+            this.updateConnection(conn)
+
+        })
+    }
+
+    private fun updateConnection(conn: DeviceConnection) {
+
+        // clear subscribers of old connection, if any
+        disposables.clear()
+        disposables = CompositeDisposable()
+
+        conn.volumes.subscribe { vol ->
+            volumeSeries
+                    .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
+        }
+
+        disposables.add(
+                conn.volumes
+                        .debounce(100, TimeUnit.MILLISECONDS)
+                        .subscribe { n -> volumeUpdated.onNext(n) }
+        )
+        /*volumeSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
+            val graph = this.findViewById(R.id.graph_volume) as GraphView
+            graph.viewport.setMinX(volumeSeries.lowestValueX)
+            graph.viewport.setMaxX(volumeSeries.highestValueX)*/
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        disposables.clear()
+    }
+
+
+    companion object {
+        val MAX_GRAPH_ELEMENTS = 120
     }
 }
 
