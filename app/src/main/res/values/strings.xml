@@ -19,4 +19,10 @@
     <string name="title_activity_devices">Devices</string>
     <string name="monitor_btn_live_live">live</string>
     <string name="monitor_btn_live_stop">stop</string>
+    <string name="btn_monitor">Monitor</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="host_name">Host Name</string>
+    <string name="text_connecting">Connecting...</string>
+    <string name="text_connected">Connected</string>
+    <string name="status">Status</string>
 </resources>

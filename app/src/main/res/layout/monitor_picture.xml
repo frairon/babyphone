@@ -79,7 +79,7 @@
             android:id="@+id/btn_live"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@{model.livePicture ? R.string.monitor_btn_live_stop : R.string.monitor_btn_live_live}"
+            android:text="@{model.livePicture ? @string/monitor_btn_live_stop : @string/monitor_btn_live_live}"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginEnd="16dp"
@@ -110,7 +110,6 @@
     <data>
 
         <import type="android.view.View" />
-        <import type="babyphone.frosi.babyphone.R" />
 
         <variable
             name="model"

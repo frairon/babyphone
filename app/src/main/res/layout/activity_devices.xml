@@ -5,6 +5,9 @@
         <variable
             name="deviceViewModel"
             type="babyphone.frosi.babyphone.models.DeviceViewModel" />
+        <variable
+            name="utils"
+            type="babyphone.frosi.babyphone.models.ViewUtils" />
     </data>
     <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
@@ -59,6 +62,7 @@
                     android:text="No Active Connection" />
 
                 <include layout="@layout/devices_current"
+                    app:utils="@{utils}"
                     app:deviceViewModel="@{deviceViewModel}"/>
 
                 <View

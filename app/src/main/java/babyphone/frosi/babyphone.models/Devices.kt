@@ -1,10 +1,15 @@
 package babyphone.frosi.babyphone.models
 
 import android.app.Application
+import android.content.Context
 import android.text.TextUtils
+import android.util.Log
 import androidx.lifecycle.*
 import babyphone.frosi.babyphone.*
+import babyphone.frosi.babyphone.R
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposable
+import kotlinx.android.synthetic.main.devices_current.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
@@ -27,6 +32,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private val discovery = Discovery()
 
+    private lateinit var connDisposable: Disposable
     private var disposables = CompositeDisposable()
 
     init {
@@ -53,11 +59,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         this.activeDevice.postValue(device)
     }
 
-
     fun connectService(service: ConnectionService) {
         this.service = service
 
-        disposables.add(service.connections.subscribe { conn -> this.updateConnection(conn) })
+        connDisposable = service.connections.subscribe { conn ->
+            Log.i("deviceModel", "getting new connection $conn")
+            this.updateConnection(conn)
+        }
     }
 
     private fun updateConnection(conn: DeviceConnection) {
@@ -66,7 +74,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         disposables = CompositeDisposable()
 
         // wire to the new connection
-        disposables.add(conn.connectionState.subscribe { n -> this.connectionState.postValue(n) })
+        disposables.add(conn.connectionState.subscribe { n ->
+            this.connectionState.postValue(n)
+            this.pingDevices()
+            if (n == DeviceConnection.ConnectionState.Disconnected) {
+                this.activeDevice.postValue(null)
+            }
+        })
         disposables.add(conn.connectionState.subscribe { n -> pingDevices() })
         this.activeDevice.postValue(conn.device)
     }
@@ -126,6 +140,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         super.onCleared()
         discovery.stop()
         disposables.clear()
+        connDisposable.dispose()
         EventBus.getDefault().unregister(this)
     }
 }
@@ -135,4 +150,15 @@ class DeviceViewModelFactory(val application: Application) : ViewModelProvider.F
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return DeviceViewModel(application) as T
     }
+}
+
+class ViewUtils(private val ctx: Context) {
+    fun connectionState(cs: DeviceConnection.ConnectionState): String {
+        return when (cs) {
+            DeviceConnection.ConnectionState.Connecting -> ctx.getString(R.string.text_connecting)
+            DeviceConnection.ConnectionState.Connected -> ctx.getString(R.string.text_connected)
+            else -> cs.toString()
+        }
+    }
+
 }

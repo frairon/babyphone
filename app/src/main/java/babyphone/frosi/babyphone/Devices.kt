@@ -21,6 +21,7 @@ import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
 import babyphone.frosi.babyphone.databinding.DevicesItemBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
 import babyphone.frosi.babyphone.models.DeviceViewModelFactory
+import babyphone.frosi.babyphone.models.ViewUtils
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.android.synthetic.main.activity_devices.*
 import kotlinx.android.synthetic.main.devices_current.*
@@ -93,6 +94,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         val binding = DataBindingUtil.setContentView<ActivityDevicesBinding>(this, R.layout.activity_devices)
         binding.deviceViewModel = devicesViewModel
         binding.lifecycleOwner = this
+        binding.utils = ViewUtils(this)
         setSupportActionBar(toolbar)
 
         this.btn_disconnect.setOnClickListener(this)
@@ -143,7 +145,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onClick(v: View?) {
         when (v?.id) {
             R.id.btn_disconnect -> {
-                service?.disconnect()
+                service!!.disconnect()
             }
             R.id.btn_monitor -> {
                 val intent = Intent(this, Babyphone::class.java)

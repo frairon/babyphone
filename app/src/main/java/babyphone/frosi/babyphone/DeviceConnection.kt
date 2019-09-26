@@ -13,13 +13,12 @@ import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.functions.BiFunction
 import io.reactivex.rxkotlin.mergeAllSingles
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.ReplaySubject
 import okhttp3.OkHttpClient
-import okhttp3.mockwebserver.MockWebServer
-import org.greenrobot.eventbus.EventBus
 import org.json.JSONObject
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -29,16 +28,17 @@ class ConnectionLifecycle(
         private val lifecycleRegistry: LifecycleRegistry = LifecycleRegistry()
 ) : Lifecycle by lifecycleRegistry {
 
+    val running = BehaviorSubject.create<Lifecycle.State>()
+
     init {
         lifecycleRegistry.onNext(Lifecycle.State.Started)
-    }
-
-    fun start() {
-        lifecycleRegistry.onNext(Lifecycle.State.Started)
+        running.onNext(Lifecycle.State.Started)
     }
 
     fun stop() {
-        lifecycleRegistry.onNext(Lifecycle.State.Stopped.WithReason(ShutdownReason.GRACEFUL))
+        val event = Lifecycle.State.Stopped.WithReason(ShutdownReason.GRACEFUL)
+        lifecycleRegistry.onNext(event)
+        running.onNext(event)
         lifecycleRegistry.onComplete()
     }
 }
@@ -49,7 +49,7 @@ interface SchedulerProvider {
 }
 
 class DeviceConnection(val device: Device,
-                       socketFactory: ((Device, ConnectionLifecycle) -> DeviceConnectionService) = DeviceConnection.scarletSocketFactory,
+                       socketFactory: ((Device, ConnectionLifecycle) -> DeviceConnectionService) = scarletSocketFactory,
                        schedProvider: SchedulerProvider = reactiveXSchedulers()
 ) {
 
@@ -75,8 +75,7 @@ class DeviceConnection(val device: Device,
 
     val missingHeartbeat: Observable<Long>
 
-
-    var connectionState: Observable<ConnectionState>
+    val connectionState: Observable<ConnectionState>
 
     enum class ConnectionState {
         Disconnected,
@@ -99,7 +98,6 @@ class DeviceConnection(val device: Device,
                     .writeTimeout(10, TimeUnit.SECONDS)
                     .build()
 
-            Log.d(TAG, "beore creating socket")
             return Scarlet.Builder()
                     .webSocketFactory(okHttpClient.newWebSocketFactory("ws://${device.hostname}:8080"))
                     .addMessageAdapterFactory(MoshiMessageAdapter.Factory())
@@ -116,26 +114,36 @@ class DeviceConnection(val device: Device,
         socket = socketFactory(device, connLifecycle)
         Log.d(TAG, "after creating socket")
 
-        connectionState = socket.observeWebSocketEvent()
+        // our connection state is combined of two observables:
+        // (1) the socket's websocket events filtered for connection events
+        // (2) the connection lifecycle.
+        // The combiner function (BiFunction) checks both events and converts it into our
+        // correct ConnectionState.
+        // The observable is triggered on both events (websocket event and lifecycle event)
+        connectionState = Observable.combineLatest(socket.observeWebSocketEvent()
                 .filter { data ->
                     data is WebSocket.Event.OnConnectionClosed
                             || data is WebSocket.Event.OnConnectionClosing
                             || data is WebSocket.Event.OnConnectionFailed
                             || data is WebSocket.Event.OnConnectionOpened<*>
-                }
-                .map { data ->
-                    Log.i(TAG, "received event ${data.toString()}")
-                    when (data) {
-                        is WebSocket.Event.OnConnectionClosed -> ConnectionState.Disconnected
-                        is WebSocket.Event.OnConnectionClosing -> ConnectionState.Disconnected
-                        is WebSocket.Event.OnConnectionFailed -> ConnectionState.Disconnected
-                        else -> ConnectionState.Connected
+                },
+                connLifecycle.running,
+                BiFunction<WebSocket.Event, Lifecycle.State, ConnectionState> { event, state ->
+                    if (state == Lifecycle.State.Started) {
+                        when (event) {
+                            is WebSocket.Event.OnConnectionOpened<*> -> ConnectionState.Connected
+                            else -> ConnectionState.Connecting
+                        }
+                    } else {
+                        ConnectionState.Disconnected
                     }
-                }.startWith(ConnectionState.Connecting)
+                })
+                .startWith(ConnectionState.Connecting)
                 .replay(1).autoConnect()
 
-        disposables.add(socket.observeActions().subscribe { m -> Log.i(TAG, "receiving ${m.toString()}") })
-        Log.i(TAG, "observing to actions")
+        // Volume:
+        // filter the received actions, remap it to 0-100 and let's keep
+        // only the last 1000 items or 300 seconds
         volumes = socket.observeActions()
                 .filter { a -> a.action == "volume" }
                 .map { a -> Volume(Date(), (a.volume * 100.0).toInt()) }
@@ -151,10 +159,13 @@ class DeviceConnection(val device: Device,
         missingHeartbeat = socket.observeActions()
                 .filter { a -> a.action == "heartbeat" }
                 .window(20, TimeUnit.SECONDS, schedProvider.computation())
-                .map { w -> w.count() }.mergeAllSingles().filter { c -> c == 0L }
+                .map { w -> w.count() }
+                .mergeAllSingles()
+                .filter { c -> c == 0L }
 
         systemStatus = socket.observeActions()
-                .filter { a -> a.action == "systemstatus" }.map {
+                .filter { a -> a.action == "systemstatus" }
+                .map {
                     when (it.status) {
                         "shutdown" -> DeviceOperation.Shutdown
                         "restart" -> DeviceOperation.Restart
