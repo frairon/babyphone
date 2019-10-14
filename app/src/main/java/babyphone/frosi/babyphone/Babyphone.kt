@@ -1,16 +1,17 @@
 package babyphone.frosi.babyphone
 
+import android.animation.ValueAnimator
 import android.content.*
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
+import android.view.*
+import android.view.animation.LinearInterpolator
+import android.widget.PopupWindow
 import android.widget.SeekBar
-import android.widget.Switch
 import androidx.annotation.UiThread
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
@@ -23,18 +24,21 @@ import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModelProviders
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.viewpager.widget.ViewPager
-import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
 import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
+import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
+import babyphone.frosi.babyphone.models.DeviceViewModel
+import babyphone.frosi.babyphone.models.ImagePager
 import babyphone.frosi.babyphone.models.MonitorViewModel
-import babyphone.frosi.babyphone.models.MonitorViewModelFactory
 import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
-import com.jjoe64.graphview.series.DataPoint
-import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.conn_details.*
 import kotlinx.android.synthetic.main.monitor_picture.*
 import kotlinx.coroutines.CoroutineScope
@@ -45,7 +49,6 @@ import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
 import java.text.SimpleDateFormat
-import java.util.*
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -81,24 +84,36 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     private val imagePager = ImagePager(this)
 
     private lateinit var model: MonitorViewModel
+    private lateinit var deviceModel: DeviceViewModel
 
     private val disposables = CompositeDisposable()
+
+    private var motionReloadAnimator: ValueAnimator? = null
+
+    private val player = Player()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         model = ViewModelProviders
-                .of(this, MonitorViewModelFactory(this.application))
+                .of(this, MonitorViewModel.Factory(this.application))
                 .get(MonitorViewModel::class.java)
+
+        deviceModel = ViewModelProviders
+                .of(this, DeviceViewModel.Factory(this.application))
+                .get(DeviceViewModel::class.java)
+
         lifecycle.addObserver(uiScope)
         // create the layout and bind the model to it
         val binding = DataBindingUtil.setContentView<ActivityMonitorBinding>(this, R.layout.activity_monitor)
         binding.model = model
+        binding.deviceModel = deviceModel
         binding.lifecycleOwner = this
 
         this.btn_live.setOnClickListener(this)
         this.hide_menu.setOnClickListener(this)
-
+        this.inactive_blocker.setOnClickListener { true }
+        this.btn_visual_settings.setOnClickListener(this)
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
         setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
@@ -109,16 +124,40 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             actionbar.title = "Babyphone"
         }
 
-//        val collapsingToolbar = findViewById<View>(R.id.collapsing_toolbar) as CollapsingToolbarLayout
-//        collapsingToolbar.title = getString(R.string.app_name)
-
+        val collapsingToolbar = findViewById<View>(R.id.collapsing_toolbar) as CollapsingToolbarLayout
+        collapsingToolbar.title = getString(R.string.app_name)
 
         AndroidThreeTen.init(this);
 
         initVolumeGraph()
 
-        val activity = this
+        this.liveVideo.holder.addCallback(this.player)
 
+        this.images.adapter = this.model.imagePager
+        disposables.add(this.model.movementUpdated
+                .filter { it.intervalMillis != 0L }
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    if (motionReloadAnimator != null) {
+                        motionReloadAnimator?.cancel()
+                        motionReloadAnimator?.removeAllUpdateListeners()
+                        this.motionReloadAnimator = null
+                    }
+                    Log.i(TAG, "movement updated, starting animation $it")
+
+                    val ani = ValueAnimator.ofInt(0, 1000)
+                    ani.duration = it.intervalMillis
+                    ani.interpolator = LinearInterpolator()
+                    ani.addUpdateListener {
+                        this.prog_refresh_timeout.progress = it.animatedValue as Int
+                    }
+                    motionReloadAnimator = ani
+
+                    ani.start()
+                })
+
+//        val activity = this
+//
 //        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
 //        setVolumeThresholdIcon()
 //        volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -155,9 +194,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //        activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
 
         connectToServiceBroadcast()
+        ConnectionService.startService(this)
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
     }
 
+    var popup: PopupWindow? = null
 
     override fun onClick(v: View?) {
         if (v == null) {
@@ -170,10 +211,26 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 abl.setExpanded(false)
             }
             R.id.btn_live -> {
-                val live = this.model?.livePicture.value
-                if (live != null) {
-                    this.model?.livePicture.postValue(!live)
+                var live = this.model.livePicture.value == true
+                live = !live
+                this.model.livePicture.postValue(live)
+                if (live) {
+                    this.player.start()
+                } else {
+                    this.player.stop()
                 }
+            }
+            R.id.btn_visual_settings -> {
+
+                val inflater = this.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
+                val binding = DataBindingUtil.inflate<VisualOptionsBinding>(inflater, R.layout.visual_options, null, false)
+                val popup = PopupWindow(binding.root,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                binding.model = this.model
+
+                popup.isFocusable = true
+                popup.isTouchable = true
+                popup.showAsDropDown(this.btn_visual_settings)
             }
         }
     }
@@ -186,7 +243,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         super.onStop()
     }
 
-    class TimedDrawable(val drawable: Drawable, val instant: Instant)
+    class TimedDrawable(val drawable: Drawable, val instant: Instant) {
+        companion object {
+            val INVALID = TimedDrawable(ColorDrawable(), Instant.now())
+        }
+    }
 
     fun loadAndShowImage() {
         loaderScope.launch {
@@ -267,14 +328,9 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         graph.addSeries(this.model.volumeSeries)
         graph.addSeries(this.model.thresholdSeries)
         graph.addSeries(this.model.alarmSeries)
-        graph.addSeries(this.model.movementSeries)
 
         this.model.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
         this.model.alarmSeries.color = Color.MAGENTA
-
-        this.model.movementSeries.shape = PointsGraphSeries.Shape.POINT
-        this.model.movementSeries.color = Color.DKGRAY
-        this.model.movementSeries.size = 5F
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
         this.model.volumeSeries.thickness = 4
@@ -292,10 +348,17 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         vp.setMinX(this.model.volumeSeries.lowestValueX)
         vp.setMaxX(this.model.volumeSeries.highestValueX)
 
-        disposables.add(this.model.volumeUpdated.subscribe { vol ->
+        disposables.add(this.model.volumeUpdated.observeOn(AndroidSchedulers.mainThread()).subscribe { vol ->
             graph.viewport.setMinX(this.model.volumeSeries.lowestValueX)
             graph.viewport.setMaxX(this.model.volumeSeries.highestValueX)
         })
+
+        disposables.add(this.model.imagePager.sizeUpdated
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    Log.d(TAG, "adding image to imagepager in thread ${Thread.currentThread().name}")
+                    this.images.currentItem = it - 1
+                })
 
         graph.gridLabelRenderer.numHorizontalLabels = 3
     }
@@ -309,6 +372,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     companion object {
+        val TAG = "babyphone"
         val MAX_GRAPH_ELEMENTS = 120
         val VIDEO_ACTIVITY_REQ_CODE = 1
         val EXTRA_DEVICE_ADDR = "io.frosi.babyphone.device.addr"
@@ -324,6 +388,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         }
 
         this.model.connectService(this.service!!)
+        this.deviceModel.connectService(this.service!!)
+        this.player.connectService(this.service!!)
 
 //        this.setConnectionStatus(this.service!!.connectionState, true)
 
@@ -386,6 +452,21 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //    fun handleConnnectionState(cu: ConnectionStateUpdated) {
 //        setConnectionStatus(cu.proxyState)
 //    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (this.model.livePicture.value == true) {
+            this.player.start()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (this.model.livePicture.value == true) {
+            this.player.stop()
+        }
+    }
 
     private fun connectToServiceBroadcast() {
         val activity = this

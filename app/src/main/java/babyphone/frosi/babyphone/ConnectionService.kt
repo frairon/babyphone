@@ -1,6 +1,7 @@
 package babyphone.frosi.babyphone
 
 import android.app.*
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
@@ -110,6 +111,7 @@ class ConnectionService : Service() {
 
     var conn: DeviceConnection? = null
 
+    val discovery = Discovery()
 
     val connections = BehaviorSubject.create<DeviceConnection>()
 
@@ -144,6 +146,9 @@ class ConnectionService : Service() {
             // or other notification behaviors after this
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+
+        // start discovery
+        discovery.start()
     }
 
     fun connect(device: Device, reconnect: Boolean = true) {
@@ -179,7 +184,6 @@ class ConnectionService : Service() {
         Log.i(TAG, "onstartcommand")
         return START_STICKY
     }
-
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
         val showBabyphone = Intent(this, Babyphone::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -225,19 +229,21 @@ class ConnectionService : Service() {
         stopForeground(true)
         this.conn?.disconnect()
         stopSelf()
+        this.discovery.stop()
         super.onDestroy()
+    }
+
+    fun startStream() {
+        this.conn?.startStream()
+    }
+
+    fun stopStream() {
+        this.conn?.stopStream()
     }
 
 //    @Subscribe(threadMode = ThreadMode.POSTING)
 //    fun onStreamAction(sa: StreamAction) {
-//        val data = JSONObject();
-//        if (sa.action == StreamAction.Action.Start) {
-//            data.put("action", "_startstream");
-//        } else {
-//            data.put("action", "_stopstream");
-//        }
-//        Log.i(TAG, "sending to socket" + data.toString())
-//        this.conn?.mWebSocketClient?.send(data.toString())
+
 //    }
 
 
@@ -324,5 +330,12 @@ class ConnectionService : Service() {
         val CONNECTION_ERROR_PATTERN = longArrayOf(200, 200)
 
         private val TAG = ConnectionService::class.java.simpleName
+
+        fun startService(context: Context) {
+            val componentName = context.startService(Intent(context, ConnectionService::class.java))
+            if (componentName == null) {
+                throw RuntimeException("Could not start connection service. does not exist")
+            }
+        }
     }
 }

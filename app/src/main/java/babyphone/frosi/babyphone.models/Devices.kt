@@ -30,8 +30,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository: DeviceRepository = DeviceRepository(DeviceDatabase.getDatabase(application).deviceDao())
 
-    private val discovery = Discovery()
-
     private lateinit var connDisposable: Disposable
     private var disposables = CompositeDisposable()
 
@@ -50,8 +48,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
         // default is disconnected
         connectionState.value = DeviceConnection.ConnectionState.Disconnected
-
-        discovery.start()
     }
 
     fun connectDevice(device: Device) {
@@ -60,7 +56,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun connectService(service: ConnectionService) {
+        Log.i(TAG, "connecting service")
         this.service = service
+
+        this.discover()
 
         connDisposable = service.connections.subscribe { conn ->
             Log.i("deviceModel", "getting new connection $conn")
@@ -86,9 +85,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun discover() {
+        Log.i(TAG, "starting discovery")
+        val service = this.service ?: return
         // start recovery every time we go back to the activity somehow
         viewModelScope.launch(Dispatchers.IO) {
-            discovery.discover()
+            service.discovery.discover()
         }
 
         this.pingDevices()
@@ -108,10 +109,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         repository.delete(device)
     }
 
+    fun update(device: Device) = viewModelScope.launch(Dispatchers.IO) {
+        repository.update(device)
+    }
+
     private fun pingDevices() {
+        Log.i(TAG, "pinging devices")
+        val service = this.service ?: return
         allDevices.value?.forEach { dev ->
             viewModelScope.launch(Dispatchers.IO) {
-                dev.alive = this@DeviceViewModel.discovery.checkHostIsAlive(dev.hostname)
+                dev.alive = service.discovery.checkHostIsAlive(dev.hostname)
                 updateDisconnectedDevices()
             }
         }
@@ -127,30 +134,36 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
         if (existing != null) {
             existing.alive = true
-            updateDisconnectedDevices()
         } else {
-            val newDev = Device(hostname = adv.host.toLowerCase().trim(), hostIp = "some-IP")
+            val hostname = adv.host.toLowerCase().trim()
+            val newDev = Device(hostname = hostname, name = hostname)
             newDev.alive = true
             insert(newDev)
         }
+        updateDisconnectedDevices()
     }
 
 
     override fun onCleared() {
         super.onCleared()
-        discovery.stop()
         disposables.clear()
         connDisposable.dispose()
         EventBus.getDefault().unregister(this)
     }
-}
 
-class DeviceViewModelFactory(val application: Application) : ViewModelProvider.Factory {
-
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return DeviceViewModel(application) as T
+    companion object {
+        val TAG = "devices_vm"
     }
+
+    class Factory(val application: Application) : ViewModelProvider.Factory {
+
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return DeviceViewModel(application) as T
+        }
+    }
+
 }
+
 
 class ViewUtils(private val ctx: Context) {
     fun connectionState(cs: DeviceConnection.ConnectionState): String {
@@ -160,5 +173,6 @@ class ViewUtils(private val ctx: Context) {
             else -> cs.toString()
         }
     }
+
 
 }

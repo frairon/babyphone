@@ -2,6 +2,7 @@ package babyphone.frosi.babyphone
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
+import com.squareup.moshi.JsonQualifier
 import com.tinder.scarlet.Stream
 import com.tinder.scarlet.WebSocket
 import com.tinder.scarlet.ws.Receive
@@ -62,17 +63,33 @@ class Advertise(val host: String) {
 //        @Json(name = "product_ids") val productIds: List<String>,
 //        @Json(name = "channels") val channels: List<TickerRequest>
 //)
-
 data class Action(
         @Json(name = "action") val action: String,
         @Json(name = "volume") val volume: Double = 0.0,
         @Json(name = "value") val value: Double = 0.0,
-        @Json(name = "status") val status: String = ""
+        @Json(name = "status") val status: String = "",
+        @Json(name = "type") val type: Int = 0,
+        @Json(name = "offset") val offset: Int = 0,
+        @Json(name = "time") val time: Long = 0,
+        @Json(name = "partial") val partial: Boolean = false,
+        @Json(name = "data") val data: String = "",
+        @Json(name = "configuration") val configuration: Configuration? = null,
+        @Json(name = "movement") val movement: Movement? = null
 )
 
 data class Volume(val time: Date, val volume: Int)
-data class Movement(val time: Date, val movement: Int)
 data class Alarm(val time: Date)
+
+data class Movement(
+        @Json(name = "value") val value: Double = 0.0,
+        @Json(name = "moved") val moved: Boolean = false,
+        @Json(name = "interval_millis") val intervalMillis: Long = 0
+)
+
+data class Configuration(
+        @Json(name = "night_mode") val nightMode: Boolean? = null,
+        @Json(name = "motion_detection") val motionDetection: Boolean? = null
+)
 
 interface DeviceConnectionService {
 
@@ -81,6 +98,9 @@ interface DeviceConnectionService {
 
     @Send
     fun sendRaw(raw: String)
+
+    @Send
+    fun sendAction(action: Action)
 
     @Receive
     fun observeActions(): Observable<Action>

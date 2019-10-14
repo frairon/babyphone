@@ -13,8 +13,10 @@
         android:id="@+id/picture_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignBottom="@id/pager_image"
-        android:gravity="center_horizontal"
+        android:layout_alignTop="@id/pager_image"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:gravity="end"
         android:textColor="#FFFFFFFF"
         android:textSize="14sp"
         android:typeface="monospace" />

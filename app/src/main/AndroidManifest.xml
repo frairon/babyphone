@@ -11,7 +11,7 @@
         android:supportsRtl="true"
         android:theme="@style/BabyphoneMain">
         <activity
-            android:name=".NewConnection"
+            android:name=".EditConnection"
             android:theme="@style/BabyphoneMain.NewConnection"
             android:windowSoftInputMode="stateVisible">
 
@@ -42,11 +42,6 @@
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="babyphone.frosi.babyphone.Devices" />
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
 
         <service

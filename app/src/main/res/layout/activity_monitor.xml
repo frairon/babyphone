@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
-    <data>
-        <import type="android.view.View"/>
-        <variable
-            name="model"
-            type="babyphone.frosi.babyphone.models.MonitorViewModel" />
-    </data>
-    <androidx.coordinatorlayout.widget.CoordinatorLayout
-        xmlns:app="http://schemas.android.com/apk/res-auto"
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
         android:id="@+id/coordinator"
         android:layout_width="match_parent"
@@ -28,6 +22,7 @@
                 tools:showIn="@layout/activity_monitor">
 
                 <com.jjoe64.graphview.GraphView
+                    android:background="@drawable/border"
                     android:id="@+id/graph_volume"
                     android:layout_width="0dp"
                     android:layout_height="150dp"
@@ -39,20 +34,31 @@
                     app:layout_constraintTop_toBottomOf="@id/monitor_picture" />
 
                 <include
-                    app:model="@{model}"
                     android:id="@+id/monitor_picture"
                     layout="@layout/monitor_picture"
-                    android:layout_height="wrap_content"
                     android:layout_width="0dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginRight="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:model="@{model}" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
         </androidx.core.widget.NestedScrollView>
+
+        <TextView
+            android:id="@+id/inactive_blocker"
+            android:visibility="@{deviceModel.connectionState == ConnectionState.Connected ? View.GONE : View.VISIBLE}"
+            android:layout_height="match_parent"
+            android:layout_width="match_parent"
+            android:text="@string/waiting_for_connection"
+            android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+            android:gravity="center"
+            android:textColor="#999999"
+            android:background="#B6000000" />
 
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar_layout"
@@ -68,20 +74,19 @@
                 app:layout_scrollFlags="scroll|exitUntilCollapsed|snap"
                 app:titleEnabled="false">
 
-                <!-- must be before toolbar -->
+                <include layout="@layout/conn_details" />
+
                 <androidx.appcompat.widget.Toolbar
                     android:id="@+id/toolbar"
                     android:layout_width="match_parent"
                     android:layout_height="45dp"
-                    android:background="?attr/colorPrimary"
+                    android:background="@{deviceModel.connectionState == ConnectionState.Connected ? @color/color_primary : @color/color_secondary}"
                     android:minHeight="?attr/actionBarSize"
                     android:theme="?attr/actionBarTheme"
                     app:layout_collapseMode="pin"
-                    app:layout_scrollFlags="scroll|snap|enterAlways" />
-                <!-- do not rearrange the -->
-
-                <!-- must be after toolbar -->
-                <include layout="@layout/conn_details" />
+                    app:layout_scrollFlags="scroll|snap|enterAlways"
+                    app:subtitle="@{@string/monitor_subtitle(deviceModel.activeDevice.hostname, deviceModel.connectionState)}"
+                    app:title="@string/monitor" />
 
 
             </com.google.android.material.appbar.CollapsingToolbarLayout>
@@ -89,4 +94,19 @@
 
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <data>
+
+        <import type="android.view.View" />
+
+        <import type="babyphone.frosi.babyphone.DeviceConnection.ConnectionState" />
+
+        <variable
+            name="model"
+            type="babyphone.frosi.babyphone.models.MonitorViewModel" />
+
+        <variable
+            name="deviceModel"
+            type="babyphone.frosi.babyphone.models.DeviceViewModel" />
+    </data>
 </layout>

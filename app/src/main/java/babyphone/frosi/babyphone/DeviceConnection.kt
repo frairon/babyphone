@@ -1,6 +1,9 @@
 package babyphone.frosi.babyphone
 
+import android.util.Base64
 import android.util.Log
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.Scarlet
 import com.tinder.scarlet.ShutdownReason
@@ -30,9 +33,10 @@ class ConnectionLifecycle(
 
     val running = BehaviorSubject.create<Lifecycle.State>()
 
-    init {
-        lifecycleRegistry.onNext(Lifecycle.State.Started)
-        running.onNext(Lifecycle.State.Started)
+    fun start() {
+        val event = Lifecycle.State.Started
+        lifecycleRegistry.onNext(event)
+        running.onNext(event)
     }
 
     fun stop() {
@@ -68,14 +72,18 @@ class DeviceConnection(val device: Device,
     }
 
     val volumes: Observable<Volume>
-    val movements: Observable<Movement>
     private val alarms = ReplaySubject.createWithTimeAndSize<Alarm>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
+    val movement:Observable<Movement>
 
     val systemStatus: Observable<DeviceOperation>
 
     val missingHeartbeat: Observable<Long>
 
     val connectionState: Observable<ConnectionState>
+
+    val frames: Observable<VideoFrame>
+
+    val config: Observable<Configuration>
 
     enum class ConnectionState {
         Disconnected,
@@ -100,7 +108,7 @@ class DeviceConnection(val device: Device,
 
             return Scarlet.Builder()
                     .webSocketFactory(okHttpClient.newWebSocketFactory("ws://${device.hostname}:8080"))
-                    .addMessageAdapterFactory(MoshiMessageAdapter.Factory())
+                    .addMessageAdapterFactory(MoshiMessageAdapter.Factory(moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()))
                     .addStreamAdapterFactory(RxJava2StreamAdapterFactory())
                     .backoffStrategy(backoffStrategy)
                     .lifecycle(lifecycle)
@@ -113,6 +121,11 @@ class DeviceConnection(val device: Device,
 
         socket = socketFactory(device, connLifecycle)
         Log.d(TAG, "after creating socket")
+
+//        disposables.add(socket.observeWebSocketEvent().filter { it is WebSocket.Event.OnMessageReceived }.subscribe {
+//            val msg = it as WebSocket.Event.OnMessageReceived
+//            Log.i(TAG, "received " + msg.message.toString())
+//        })
 
         // our connection state is combined of two observables:
         // (1) the socket's websocket events filtered for connection events
@@ -141,6 +154,14 @@ class DeviceConnection(val device: Device,
                 .startWith(ConnectionState.Connecting)
                 .replay(1).autoConnect()
 
+        // send a configuration-request every time we get a connection
+        disposables.add(this.socket.observeWebSocketEvent().subscribe {
+            if (it is WebSocket.Event.OnConnectionOpened<*>) {
+                Log.d(TAG, "requesting configuration")
+                this.socket.sendAction(Action(action = "configuration_request"))
+            }
+        })
+
         // Volume:
         // filter the received actions, remap it to 0-100 and let's keep
         // only the last 1000 items or 300 seconds
@@ -150,12 +171,9 @@ class DeviceConnection(val device: Device,
                 .replay(1000, 300, TimeUnit.SECONDS, schedProvider.computation())
                 .autoConnect()
 
-        movements = socket.observeActions()
-                .filter { a -> a.action == "movement" }
-                .map { a -> Movement(Date(), (a.value * 100.0).toInt()) }
-                .replay(1000, 300, TimeUnit.SECONDS, schedProvider.computation())
-                .autoConnect()
-
+        movement = socket.observeActions()
+                .filter{it.action=="movement" && it.movement != null}
+                .map {it.movement!!}
         missingHeartbeat = socket.observeActions()
                 .filter { a -> a.action == "heartbeat" }
                 .window(20, TimeUnit.SECONDS, schedProvider.computation())
@@ -173,7 +191,32 @@ class DeviceConnection(val device: Device,
                     }
                 }
 
+        frames = socket.observeActions()
+                .filter { a -> a.action == "vframe" }
+                .map {
+                    VideoFrame(
+                            Base64.decode(it.data, Base64.DEFAULT),
+                            it.offset,
+                            it.time,
+                            VideoFrame.Type.fromInt(it.type),
+                            it.partial
+                    )
+                }
 
+        val cfgConnector = socket.observeActions()
+                .filter { it.action == "configuration" && it.configuration != null }
+                .map { it.configuration!! }
+                .map {
+                    Log.d(TAG, "received configuration $it")
+                    it
+                }
+//                .startWith(Configuration(motionDetection = true))
+                .replay(1)
+        disposables.add(cfgConnector.connect())
+        config = cfgConnector
+
+        // start the connection after we have wired up the Observables
+        connLifecycle.start()
     }
 
     fun disconnect() {
@@ -184,6 +227,17 @@ class DeviceConnection(val device: Device,
 //        NotificationManagerCompat.from(this).cancel(ConnectionService.NOTI_SERVICE_ID)
     }
 
+    fun startStream() {
+        this.socket.sendAction(Action(action = "_startstream"))
+    }
+
+    fun stopStream() {
+        this.socket.sendAction(Action(action = "_stopstream"))
+    }
+
+    fun updateConfig(cfg: Configuration) {
+        this.socket.sendAction(Action(action = "configuration_update", configuration = cfg))
+    }
 
 //    override fun onConnect() {
 //        Log.i(TAG, "Websocket onConnect()")
@@ -226,21 +280,6 @@ class DeviceConnection(val device: Device,
 //            }
 //            "heartbeat" -> {
 //                heartbeat.heartbeat()
-//            }
-//            "vframe" -> {
-//                val type = VideoFrame.Type.fromInt(parsed.optInt("type"))
-//                val offset = parsed.optInt("offset")
-//                val timestamp = parsed.optLong("time")
-//                val partial = parsed.optBoolean("partial")
-//                val data = parsed.optString("data")
-//                val dataBytes = Base64.decode(data, Base64.DEFAULT)
-//                EventBus.getDefault().post(VideoFrame(
-//                        dataBytes,
-//                        offset,
-//                        timestamp,
-//                        type,
-//                        partial
-//                ))
 //            }
 //            "systemstatus" -> {
 //                val status = parsed.optString("status")
@@ -300,14 +339,10 @@ class DeviceConnection(val device: Device,
     }
 
     fun shutdown() {
-        val data = JSONObject();
-        data.put("action", "shutdown");
-        this.socket.sendRaw(data.toString())
+        this.socket.sendAction(Action(action = "shutdown"))
     }
 
     fun restart() {
-        val data = JSONObject();
-        data.put("action", "restart");
-        this.socket.sendRaw(data.toString())
+        this.socket.sendAction(Action(action = "restart"))
     }
 }

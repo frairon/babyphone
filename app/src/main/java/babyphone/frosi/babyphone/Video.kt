@@ -95,50 +95,6 @@ class Video : AppCompatActivity(), ServiceConnection, SurfaceHolder.Callback {
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.POSTING)
-    fun handleVideoFrame(cu: VideoFrame) {
-        // acquire a buffer-ID, wait up to 200ms for that
-        if (this.mc == null) {
-            return
-        }
-//        Log.w("Video", "received input frame ${cu.data.size}")
-        val inputBufferId = this.mc!!.dequeueInputBuffer(1000000)
-        if (inputBufferId < 0) {
-            Log.e("video", "No buffer available. Increase timeout?")
-            return
-        }
-
-        val inputBuffer = this.mc!!.getInputBuffer(inputBufferId)
-        // fill in the frame
-        inputBuffer.put(cu.data)
-        var flags = 0
-        if (cu.type == VideoFrame.Type.Config) {
-            flags = MediaCodec.BUFFER_FLAG_CODEC_CONFIG
-        } else if (cu.partial) {
-            flags = MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
-        }
-        try {
-            this.mc!!.queueInputBuffer(inputBufferId,
-                    cu.offset,
-                    cu.data.size,
-                    cu.timestamp,
-                    flags)
-        } catch (e: Exception) {
-            Log.e("Video", "error adding buffer", e)
-        }
-        try {
-            val bufInfo = MediaCodec.BufferInfo()
-            val outId = this.mc!!.dequeueOutputBuffer(bufInfo, 0)
-            if (outId < 0) {
-                Log.i("Video", "no output buffer available")
-            } else {
-//                Log.i("video", "releasing output buffer")
-                this.mc!!.releaseOutputBuffer(outId, true)
-            }
-        } catch (e: Exception) {
-            Log.e("Video", "error releasing output buffer", e)
-        }
-    }
 
     override fun onStart() {
         super.onStart()

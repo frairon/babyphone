@@ -9,9 +9,9 @@ import android.os.IBinder
 import android.text.TextUtils
 import android.util.Log
 import android.view.*
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.widget.PopupMenu
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
@@ -20,10 +20,10 @@ import androidx.recyclerview.widget.RecyclerView
 import babyphone.frosi.babyphone.databinding.ActivityDevicesBinding
 import babyphone.frosi.babyphone.databinding.DevicesItemBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
-import babyphone.frosi.babyphone.models.DeviceViewModelFactory
 import babyphone.frosi.babyphone.models.ViewUtils
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.android.synthetic.main.activity_devices.*
+import kotlinx.android.synthetic.main.activity_edit_connection.*
 import kotlinx.android.synthetic.main.devices_current.*
 
 
@@ -39,6 +39,8 @@ class DeviceListAdapter internal constructor(
         init {
             itemView.findViewById<View>(R.id.btn_connect).setOnClickListener(this)
             itemView.findViewById<View>(R.id.btn_delete).setOnClickListener(this)
+            itemView.findViewById<View>(R.id.btn_edit).setOnClickListener(this)
+
         }
 
         override fun onClick(v: View?) {
@@ -50,6 +52,15 @@ class DeviceListAdapter internal constructor(
                 R.id.btn_delete -> {
                     model.delete(device)
                 }
+                R.id.btn_edit -> {
+                    val intent = Intent(context, EditConnection::class.java)
+                    intent.putExtra(EditConnection.EXTRA_EDIT_ID, device.id)
+                    intent.putExtra(EditConnection.EXTRA_NAME, device.name)
+                    intent.putExtra(EditConnection.EXTRA_HOSTNAME, device.hostname)
+                    context.startActivityForResult(intent,
+                            Devices.newConnectionActivityRequestCode)
+                }
+
             }
         }
     }
@@ -76,6 +87,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     companion object {
         const val newConnectionActivityRequestCode = 1
+        const val TAG = "activity_devices"
     }
 
     private lateinit var devicesViewModel: DeviceViewModel
@@ -85,10 +97,10 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.i("devices", "oncreate")
+        Log.i(TAG, "oncreate")
 
         devicesViewModel = ViewModelProviders
-                .of(this, DeviceViewModelFactory(this.application))
+                .of(this, DeviceViewModel.Factory(this.application))
                 .get(DeviceViewModel::class.java)
 
         val binding = DataBindingUtil.setContentView<ActivityDevicesBinding>(this, R.layout.activity_devices)
@@ -110,16 +122,16 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             devices?.let { adapter.setDevices(it) }
         })
 
-        val componentName = this.startService(Intent(this, ConnectionService::class.java))
-        if (componentName == null) {
-            throw RuntimeException("Could not start connection service. does not exist")
-        }
+        ConnectionService.startService(this)
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
 
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        getMenuInflater().inflate(R.menu.menu_devices, menu);
+        if (menu is MenuBuilder) {
+            menu.setOptionalIconsVisible(true)
+        }
+        getMenuInflater().inflate(R.menu.menu_devices, menu)
         return true;
     }
 
@@ -128,13 +140,16 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             R.id.action_exit -> {
                 this.exit()
             }
+            R.id.action_discover -> {
+                this.devicesViewModel.discover()
+            }
         }
         return super.onOptionsItemSelected(item)
     }
 
     override fun onResume() {
         super.onResume()
-        Log.i("devices", "onresume")
+        Log.i(TAG, "onresume")
         devicesViewModel.discover()
     }
 
@@ -172,7 +187,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 }
             }
             R.id.fab -> {
-                this.startActivityForResult(Intent(this, NewConnection::class.java),
+                this.startActivityForResult(Intent(this, EditConnection::class.java),
                         newConnectionActivityRequestCode)
             }
         }
@@ -198,12 +213,9 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-        Log.i("devices", "service connected")
+        Log.i(TAG, "service connected")
         val svc = (service as ConnectionService.ConnectionServiceBinder).service
 
-        if (svc == null) {
-            return
-        }
         devicesViewModel.connectService(svc)
         this.service = svc
     }
@@ -217,9 +229,17 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         if (requestCode == newConnectionActivityRequestCode && resultCode == Activity.RESULT_OK) {
             data?.let {
-                val device = Device(hostname = it.getStringExtra(NewConnection.EXTRA_HOSTNAME),
-                        hostIp = it.getStringExtra(NewConnection.EXTRA_IP))
-                devicesViewModel.insert(device)
+                val device = Device(hostname = it.getStringExtra(EditConnection.EXTRA_HOSTNAME),
+                        name = it.getStringExtra(EditConnection.EXTRA_NAME))
+                val existingId = it.getIntExtra(EditConnection.EXTRA_EDIT_ID, -1)
+                if (existingId != -1) {
+                    device.id = existingId
+                    Log.i(TAG, "updating device")
+                    devicesViewModel.update(device)
+                } else {
+                    Log.i(TAG, "updating device")
+                    devicesViewModel.insert(device)
+                }
             }
         } else {
             Toast.makeText(
@@ -230,7 +250,7 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     override fun onDestroy() {
-        Log.i("devices", "onDestroy")
+        Log.i(TAG, "onDestroy")
         this.unbindService(this)
         super.onDestroy()
     }
@@ -243,46 +263,59 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 }
 
 
-class NewConnection : AppCompatActivity() {
+class EditConnection : AppCompatActivity(), View.OnClickListener {
 
-
-    companion object {
-        const val EXTRA_HOSTNAME = "babyphone.frosi.babyphone.connection.hostname"
-        const val EXTRA_IP = "babyphone.frosi.babyphone.connection.ip"
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_new_connection)
+        setContentView(R.layout.activity_edit_connection)
 
-        val hostName = findViewById(R.id.host_name) as TextView
-        val ip = findViewById(R.id.ip) as TextView
+        if (intent.getIntExtra(EXTRA_EDIT_ID, -1) != -1) {
+            this.input_name.setText(intent.getStringExtra(EXTRA_NAME))
+            this.input_hostname.setText(intent.getStringExtra(EXTRA_HOSTNAME))
+            this.txt_header.text = resources.getString(R.string.edit_connection_header_edit)
+            this.btn_create.text = resources.getString(R.string.btn_label_save)
+        }
+        this.btn_create.setOnClickListener(this)
+    }
 
 
-        val button = findViewById(R.id.btn_create) as View
-        button.setOnClickListener {
-            val replyIntent = Intent()
-            var error = false
-            if (TextUtils.isEmpty(hostName.text)) {
-                hostName.error = "Please specify a hostname"
-                error = true
-            } else {
-                hostName.error = null
-            }
+    override fun onClick(v: View?) {
 
-            if (TextUtils.isEmpty(ip.text)) {
-                ip.error = "Please specify an IP"
-                error = true
-            } else {
-                ip.error = null
-            }
-            if (!error) {
-                replyIntent.putExtra(EXTRA_HOSTNAME, hostName.text.toString())
-                replyIntent.putExtra(EXTRA_IP, ip.text.toString())
-                setResult(Activity.RESULT_OK, replyIntent)
-                finish()
+        when (v?.id) {
+            R.id.btn_create -> {
+                val replyIntent = Intent()
+                var error = false
+                if (TextUtils.isEmpty(this.input_hostname.text)) {
+                    this.input_hostname.error = resources.getString(R.string.edit_connection_error_hostname)
+                    error = true
+                } else {
+                    this.input_hostname.error = null
+                }
+
+                if (TextUtils.isEmpty(this.input_name.text)) {
+                    this.input_name.error = resources.getString(R.string.edit_connection_error_name)
+                    error = true
+                } else {
+                    this.input_name.error = null
+                }
+                if (!error) {
+                    replyIntent.putExtra(EXTRA_NAME, this.input_name.text.toString())
+                    replyIntent.putExtra(EXTRA_HOSTNAME, this.input_hostname.text.toString())
+                    replyIntent.putExtra(EXTRA_EDIT_ID, intent.getIntExtra(EXTRA_EDIT_ID, -1))
+                    setResult(Activity.RESULT_OK, replyIntent)
+                    finish()
+                }
             }
         }
     }
+
+    companion object {
+        const val EXTRA_NAME = "babyphone.frosi.babyphone.connection.name"
+        const val EXTRA_HOSTNAME = "babyphone.frosi.babyphone.connection.label_status"
+        const val EXTRA_EDIT_ID = "babyphone.frosi..babypohne.connection.is_edit"
+        const val TAG = "activity_edit_device"
+    }
+
 }

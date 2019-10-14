@@ -39,6 +39,11 @@ interface DeviceDao {
 
     @Delete
     suspend fun delete(device: Device)
+
+
+    @Update
+    suspend fun update(device: Device)
+
 }
 
 
@@ -47,15 +52,15 @@ data class Device(
         @PrimaryKey(autoGenerate = true)
         var id: Int = 0,
 
-        val hostname: String,
+        val name: String,
 
-        val hostIp: String
-
+        val hostname: String
 ) {
     @Ignore
     var alive = false
 
     fun isAlive(): String {
+        // TODO: put this into the viewutils and use Resource strings
         return when (alive) {
             true -> "ALIVE"
             false -> "NOT ALIVE"
@@ -84,5 +89,10 @@ class DeviceRepository(private val deviceDao: DeviceDao) {
     @WorkerThread
     suspend fun delete(device: Device) {
         deviceDao.delete(device)
+    }
+
+    @WorkerThread
+    suspend fun update(device:Device){
+        deviceDao.update(device)
     }
 }
