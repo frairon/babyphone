@@ -3,23 +3,34 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="babyphone.frosi.babyphone">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-
-    <uses-feature android:glEsVersion="0x00020000" />
-
     <application
-        android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:parentActivityName=".Devices"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/BabyphoneMain">
+        <activity
+            android:name=".EditConnection"
+            android:theme="@style/BabyphoneMain.NewConnection"
+            android:windowSoftInputMode="stateVisible">
+
+        </activity>
+        <activity
+            android:name=".Devices"
+            android:label="@string/title_activity_devices"
+            android:theme="@style/BabyphoneMain">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".Video"
             android:label="@string/title_activity_video"
             android:parentActivityName=".Babyphone"
-            android:theme="@style/AppTheme.NoActionBar">
+            android:theme="@style/BabyphoneMain">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="babyphone.frosi.babyphone.Babyphone" />
@@ -27,17 +38,20 @@
         <activity
             android:name=".Babyphone"
             android:label="@string/app_name"
-            android:theme="@style/AppTheme.NoActionBar">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            android:theme="@style/BabyphoneMain">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="babyphone.frosi.babyphone.Devices" />
         </activity>
 
         <service
             android:name=".ConnectionService"
             android:exported="false" />
     </application>
+    <uses-feature android:glEsVersion="0x00020000" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
 
 </manifest>

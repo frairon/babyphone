@@ -20,7 +20,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='babyphone2',
+    name='babyphone',
 
     version='1.0.0',
 
@@ -42,6 +42,6 @@ setup(
         'RPi.GPIO',
         'aiohttp',
         'pyalsaaudio',
-        # 'scikit-image',
+        'scikit-image', 
         ],
 )

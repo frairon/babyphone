@@ -2,11 +2,11 @@ import alsaaudio
 import sys
 import audioop
 import numpy as np
-inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='plughw:CARD=Device')
-inp.setchannels(1)
-inp.setrate(8000)
-inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-inp.setperiodsize(160)
+inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='dmic_sv')
+inp.setchannels(2)
+inp.setrate(48000)
+inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
+inp.setperiodsize(320)
 
 import math
 
@@ -34,7 +34,7 @@ import math
 # buf = ffi.new("char[%d]"%maxBuffers[0])
 try:
     i = 1
-    a = (1<<16)-1
+    a = (1<<32)-1
     with open("audio.raw", "wb") as out:
         while True:
             l, data = inp.read()
@@ -43,20 +43,21 @@ try:
             # print(l, len(data), len(npbuf))
 
             if l:
-                data = audioop.mul(data, 2, 4)
-                avg = audioop.rms(data, 2)
-                p = False
+                data = audioop.tomono(data, 4, 1, 1)
+                data = audioop.mul(data, 4, 4)
+                avg = audioop.rms(data, 4)
+                # p = False
                 # avg = math.sqrt(avg)
-                if i == 0 or avg < i:
-                    p = True
-                    i = avg
+                # if i == 0 or avg < i:
+                #     p = True
+                #     i = avg
+                #
+                # if a == 0 or avg > a:
+                #     p = True
+                #     a = avg
 
-                if a == 0 or avg > a:
-                    p = True
-                    a = avg
-
-                if p:
-                    print("min=%d, max=%d" % (i,a))
+                # if p:
+                #     print("min=%d, max=%d" % (i,a))
 
                 if a and i and a != i:
                     level = float(avg - i) / float(a-i)

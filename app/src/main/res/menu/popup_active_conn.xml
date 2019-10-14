@@ -1,0 +1,16 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="babyphone.frosi.babyphone.Devices">
+    <item
+        android:id="@+id/action_restart"
+        android:icon="@drawable/ic_settings_backup_restore_black_24dp"
+        android:title="Restart"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_shutdown"
+        android:icon="@drawable/ic_power_settings_new_black_24dp"
+        android:title="Shutdown"
+        app:showAsAction="never" />
+
+</menu>

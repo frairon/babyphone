@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="#B4DDDDDD"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/swt_motion_detection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="@{model.motionDetection}"
+            android:onCheckedChanged="@{model.onSwitchMotionDetection}"
+            android:text="Motion Detection" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/swt_night_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="@{model.nightMode}"
+            android:onCheckedChanged="@{model.onSwitchNightMode}"
+            android:text="Night Mode" />
+
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <data>
+
+        <import type="android.view.View" />
+
+        <variable
+            name="utils"
+            type="babyphone.frosi.babyphone.models.ViewUtils" />
+
+        <variable
+            name="model"
+            type="babyphone.frosi.babyphone.models.MonitorViewModel" />
+
+    </data>
+
+
+</layout>

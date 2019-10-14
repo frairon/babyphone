@@ -13,7 +13,6 @@ from skimage.measure import compare_ssim
 
 
 class MotionDetect(object):
-
     def __init__(self, babyphone):
         self._interval = 20
         self._takingPicture = False
@@ -34,6 +33,9 @@ class MotionDetect(object):
         self._runner.cancel()
         self._runner = None
 
+    def isRunning(self):
+        return self._runner is not None
+
     @asyncio.coroutine
     def _takePicture(self, nightMode):
 
@@ -46,19 +48,21 @@ class MotionDetect(object):
                 cam.brightness = 90
                 cam.iso = 800
                 cam.contrast = 90
-                cam.awb_mode = 'off'
+                cam.awb_mode = "off"
                 cam.awb_gains = (1, 1)
-                cam.exposure_mode = 'night'
+                cam.exposure_mode = "night"
                 self._bp.setLights(True)
 
             else:
-                cam.awb_mode = 'off'
-                # cam.brightness = 90
+                cam.brightness = 50
+                cam.iso = 400
+                cam.contrast = 0
+                cam.awb_mode = "off"
                 cam.awb_gains = (1, 1)
-                # cam.contrast = 90
+                cam.exposure_mode = "off"
 
             yield from asyncio.sleep(1.0)
-            cam.capture(stream, format='jpeg')
+            cam.capture(stream, format="jpeg")
             if nightMode:
                 self._bp.setLights(False)
             # Construct a numpy array from the stream
@@ -68,6 +72,8 @@ class MotionDetect(object):
 
             self.log.info("Took picture")
             return image
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.log.info("Error taking picture: %s", e)
 
@@ -78,9 +84,10 @@ class MotionDetect(object):
 
     @asyncio.coroutine
     def _run(self):
-        oldPicture = None
 
-        nightMode = False
+        self.log.info("Starting motion detection")
+
+        oldPicture = None
 
         diffValues = []
         maxVals = 20
@@ -92,12 +99,13 @@ class MotionDetect(object):
 
             if self._bp.isAnyoneStreaming():
                 self.log.info(
-                    "at least one connection is streaming, camera is busy, cannot do motion detection")
+                    "at least one connection is streaming, camera is busy, cannot do motion detection"
+                )
                 continue
 
             try:
                 self._takingPicture = True
-                picture = yield from self._takePicture(nightMode)
+                picture = yield from self._takePicture(self._bp.nightMode)
 
                 # taking picture failed for some reason
                 if picture is None:
@@ -109,18 +117,14 @@ class MotionDetect(object):
                 # it seems to be too dark or too bright, let's try different
                 # mode next time
                 if brightness == -1:
-                    nightMode = True
-                    self.log.info(
-                        "Image is too dark, will try in night mode next time")
-                    cv2.imwrite("/home/pi/toodark-%d.png" %
-                                time.time(), picture)
+                    self.log.info("Image is too dark, will try in night mode next time")
+                    yield from self._bp.setNightMode(True)
+                    cv2.imwrite("/home/pi/toodark-%d.png" % time.time(), picture)
                     continue
                 if brightness == 1:
-                    nightMode = False
-                    self.log.info(
-                        "Image is too bright, will try in day mode next time")
-                    cv2.imwrite("/home/pi/toobright-%d.png" %
-                                time.time(), picture)
+                    self.log.info("Image is too bright, will try in day mode next time")
+                    yield from self._bp.setNightMode(False)
+                    cv2.imwrite("/home/pi/toobright-%d.png" % time.time(), picture)
 
                     continue
 
@@ -134,22 +138,28 @@ class MotionDetect(object):
 
                     avg = sum(diffValues) / float(len(diffValues))
                     stddev = math.sqrt(
-                        sum(map(lambda x: pow(abs(x - avg), 2), diffValues)) / float(len(diffValues)))
+                        sum(map(lambda x: pow(abs(x - avg), 2), diffValues))
+                        / float(len(diffValues))
+                    )
 
                     moved = False
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
                         moved = True
-
-                        self._interval = 5
+                        self._interval = 1
                     else:
-                        self._interval = 20
+                        self._interval = 3
 
-                    yield from self._bp.broadcast({
-                        "action": 'movement',
-                        'value': movement,
-                        'moved': moved,
-                    })
+                    yield from self._bp.broadcast(
+                        {
+                            "action": "movement",
+                            "movement": dict(
+                                value=movement,
+                                moved=moved,
+                                interval_millis=self._interval * 1000,
+                            ),
+                        }
+                    )
 
                 oldPicture = picture
 
@@ -168,17 +178,21 @@ class MotionDetect(object):
                 # # save it to disk
                 # cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
 
-            except Exception as e:
-                self.log.info("Error taking picture: %s. Trying next time", e)
+            except asyncio.CancelledError:
+                self.log.info("Stopping motion detection as the task was cancelled")
+                return
             finally:
                 self._takingPicture = False
 
     def _imageBrightness(self, img):
         hist = cv2.calcHist([img], [0], None, [10], [0, 256])
+
+        # too dark
         if float(hist[0]) / float(img.size) > 0.99:
             return -1
 
-        if float(hist[-1]) / float(img.size) > 0.99:
+        #too bright
+        if float(hist[-1]) / float(img.size) > 0.7:
             return 1
 
         return 0
