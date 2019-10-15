@@ -22,6 +22,24 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <androidx.appcompat.widget.AppCompatTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:visibility="@{model.livePicture ? View.VISIBLE: View.GONE}"
+            android:text="@string/live"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="16dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:background="@android:color/holo_red_light"
+            android:textAppearance="@style/TextAppearance.Live"
+            />
+
+
 
         <androidx.viewpager.widget.ViewPager
             android:id="@+id/images"

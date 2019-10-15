@@ -42,4 +42,5 @@
     <string name="label_name">Name</string>
     <string name="btn_connect">Connect</string>
     <string name="btn_delete">Delete</string>
+    <string name="live">live</string>
 </resources>
