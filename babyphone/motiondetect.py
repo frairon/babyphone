@@ -146,9 +146,9 @@ class MotionDetect(object):
                     if abs(movement - avg) > 2 * stddev:
                         self.log.info("seems to have moved, take picture")
                         moved = True
-                        self._interval = 1
+                        self._interval = 4
                     else:
-                        self._interval = 3
+                        self._interval = 20
 
                     yield from self._bp.broadcast(
                         {

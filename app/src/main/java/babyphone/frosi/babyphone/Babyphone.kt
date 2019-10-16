@@ -34,6 +34,7 @@ import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
+import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -143,7 +144,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                         motionReloadAnimator?.removeAllUpdateListeners()
                         this.motionReloadAnimator = null
                     }
-                    Log.i(TAG, "movement updated, starting animation $it")
+                    Log.d(TAG, "movement updated, starting animation $it")
 
                     val ani = ValueAnimator.ofInt(0, 1000)
                     ani.duration = it.intervalMillis
@@ -177,7 +178,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
 //        volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
 //            volumeSeek.isEnabled = !isChecked
-//            activity.service?.autoVolumeLevel = isChecked
+//            activity.service?.volumeThreshold = isChecked
 //        }
 //
 //        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
@@ -191,7 +192,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //
 //        volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
 //        volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
-//        activity.service?.autoVolumeLevel = volAlarmAuto.isChecked
+//        activity.service?.volumeThreshold = volAlarmAuto.isChecked
 
         connectToServiceBroadcast()
         ConnectionService.startService(this)
@@ -318,10 +319,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         }
     }
 
-//    fun setGraphThreshold(threshold: Int) {
-//        this.thresholdSeries.resetData(arrayOf(DataPoint(0.0, threshold.toDouble()), DataPoint(Double.MAX_VALUE, threshold.toDouble())))
-//    }
-
     private fun initVolumeGraph() {
         val graph = findViewById(R.id.graph_volume) as GraphView
 
@@ -400,7 +397,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //        this.setGraphThreshold(volumeSeek.progress)
 
 //        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-//        this.service!!.autoVolumeLevel = volAlarmAuto.isChecked
+//        this.service!!.volumeThreshold = volAlarmAuto.isChecked
     }
 
 //    fun initVolumeHistory() {

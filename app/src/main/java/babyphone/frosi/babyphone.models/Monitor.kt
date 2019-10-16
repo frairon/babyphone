@@ -5,31 +5,26 @@ import android.content.BroadcastReceiver
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.View
-import androidx.annotation.WorkerThread
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.viewpager.widget.ViewPager
 import babyphone.frosi.babyphone.*
 import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
-import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
-import io.reactivex.subjects.ReplaySubject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import org.greenrobot.eventbus.EventBus
+import okhttp3.internal.waitMillis
 import org.threeten.bp.Instant
 import java.io.InputStream
 import java.net.URL
+import java.util.*
 import java.util.concurrent.TimeUnit
 
 
@@ -63,8 +58,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     private val uiScope = UiLifecycleScope()
 
-    private lateinit var connDisposable: Disposable
-    private var disposables = CompositeDisposable()
+    private val serviceDisposables = CompositeDisposable()
+    private var connDisposables = CompositeDisposable()
 
     init {
         livePicture.value = false
@@ -83,30 +78,35 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     fun connectService(service: ConnectionService) {
         this.service = service
 
-        connDisposable = service.connections.subscribe { conn ->
+        serviceDisposables.add(service.connections.subscribe { conn ->
             this.updateConnection(conn)
+        })
 
-        }
+        serviceDisposables.add(service.volumeThreshold
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    this.thresholdSeries.appendData(DataPoint(Date(), it.toDouble()), true, MAX_GRAPH_ELEMENTS, true)
+                })
     }
 
     private fun updateConnection(conn: DeviceConnection) {
 
         // clear subscribers of old connection, if any
-        disposables.clear()
-        disposables = CompositeDisposable()
+        connDisposables.clear()
+        connDisposables = CompositeDisposable()
 
-        disposables.add(conn.volumes.observeOn(AndroidSchedulers.mainThread()).subscribe { vol ->
+        connDisposables.add(conn.volumes.observeOn(AndroidSchedulers.mainThread()).subscribe { vol ->
             volumeSeries
                     .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
         })
 
-        disposables.add(
+        connDisposables.add(
                 conn.volumes
                         .debounce(100, TimeUnit.MILLISECONDS)
                         .subscribe { volumeUpdated.onNext(it) }
         )
 
-        disposables.add(
+        connDisposables.add(
                 conn.config.subscribe { cfg ->
                     Log.d(TAG, "got new config$cfg")
                     if (cfg.motionDetection != null) {
@@ -118,7 +118,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 }
         )
 
-        disposables.add(conn.movement.subscribe { movementUpdated.onNext(it) })
+        connDisposables.add(conn.movement.subscribe { movementUpdated.onNext(it) })
 
 
         val movementPictureLoadedDisp = conn.movement
@@ -135,31 +135,31 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                         Log.d(TAG, "...success!")
                         val time = Instant.ofEpochSecond(pictureTime.toLong())
 
-                                Babyphone.TimedDrawable(
-                                        Drawable.createFromStream(inputStream, time.toEpochMilli().toString()),
-                                        time
-                                )
+                        Babyphone.TimedDrawable(
+                                Drawable.createFromStream(inputStream, time.toEpochMilli().toString()),
+                                time
+                        )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error loading image $e")
                         Babyphone.TimedDrawable.INVALID
                     }
                 }
-                .filter {it != Babyphone.TimedDrawable.INVALID}
+                .filter { it != Babyphone.TimedDrawable.INVALID }
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe{
+                .subscribe {
                     Log.d(TAG, "adding image to imagepager in thread ${Thread.currentThread().name}")
 
                     this.imagePager.addImage(it)
                 }
 
-        disposables.add(movementPictureLoadedDisp)
+        connDisposables.add(movementPictureLoadedDisp)
 
     }
 
     override fun onCleared() {
         super.onCleared()
-        disposables.clear()
-        connDisposable.dispose()
+        connDisposables.clear()
+        serviceDisposables.clear()
     }
 
 

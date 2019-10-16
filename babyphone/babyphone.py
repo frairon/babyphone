@@ -176,7 +176,7 @@ class Babyphone(object):
                         data = audioop.mul(data, 4, 4)
                         rms = audioop.rms(data, 4)
 
-                        if time.time() - lastSent >= 0.5:
+                        if time.time() - lastSent >= 1.0:
                             level = float(rms) / float(maxRms)
                             lastSent = time.time()
                             asyncio.run_coroutine_threadsafe(

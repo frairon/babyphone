@@ -6,11 +6,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.*
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
@@ -115,8 +120,6 @@ class ConnectionService : Service() {
 
     val connections = BehaviorSubject.create<DeviceConnection>()
 
-    var volumeThreshold: Int = 50
-
     var lights: Boolean = false
         set(value) {
             field = value
@@ -124,7 +127,11 @@ class ConnectionService : Service() {
 
     var alarmsEnabled: Boolean = true
 
-    var autoVolumeLevel: Boolean = false
+    var autoVolumeLevelEnabled: Boolean = true
+    var volumeThreshold = BehaviorSubject.create<Int>()
+    val alarm = BehaviorSubject.create<Instant>()
+
+    private var connDisposables = CompositeDisposable()
 
     fun getMotionUrl(): String? {
         if (conn?.device?.hostname == "") {
@@ -134,6 +141,7 @@ class ConnectionService : Service() {
     }
 
     init {
+
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -149,6 +157,9 @@ class ConnectionService : Service() {
 
         // start discovery
         discovery.start()
+
+        // assume 50% volume per default
+        volumeThreshold.onNext(50)
     }
 
     fun connect(device: Device, reconnect: Boolean = true) {
@@ -159,10 +170,66 @@ class ConnectionService : Service() {
         this.connections.onNext(conn)
         this.conn = conn
 
-        Log.i(TAG, "configuring websocket-uri ${this.conn?.device?.hostname}")
+        this.updateConnection(conn)
+    }
+
+    private fun updateConnection(conn: DeviceConnection) {
+        this.connDisposables.clear()
+        this.connDisposables = CompositeDisposable()
+
+        this.connDisposables.add(conn.volumes
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe { this.handleVolume(it) })
+
+        this.connDisposables.add(conn.volumes
+                .observeOn(Schedulers.computation())
+                .map { it.volume }
+                .startWith(MutableList(60) { -1 }.asIterable())
+                .buffer(60, 1)
+                .subscribe {
+                    if (this.autoVolumeLevelEnabled) {
+                        var valids = it.filter { it != -1 }
+                        if (valids.size > 10) {
+                            val newThreshold = (valids.map { v -> v.toDouble() }.average() + 10.0).roundToInt()
+                                this.volumeThreshold.onNext(newThreshold)
+                        } else {
+                            this.volumeThreshold.onNext(50)
+                        }
+                    }
+                })
 
         this.startForeground()
+    }
 
+    private fun handleVolume(volume: Volume) {
+        if (!alarmsEnabled) {
+            return
+        }
+
+        if (volume.volume > this.volumeThreshold.value!!
+                && this.timeSinceAlarm() > Duration.ofSeconds(10)) {
+            // doAlarmVibrate()
+            this.alarm.onNext(Instant.now())
+
+            val disableAlarmIntent = Intent(this, ConnectionService::class.java)
+                    .setAction(ACTION_DISABLE_ALARM)
+                    .putExtra("extra-field", 0)
+
+            val disableAlarmPending =
+                    PendingIntent.getBroadcast(this, 0, disableAlarmIntent, 0);
+
+            doNotify({ builder ->
+                builder.setLights(Color.RED, 500, 500)
+                builder.setVibrate(arrayOf(0L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L).toLongArray())
+                builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+                builder.setContentText("Luise is crying")
+                builder.addAction(R.drawable.ic_snooze_black_24dp, "snooze", disableAlarmPending);
+            }, isAlarm = true)
+        }
+    }
+
+    private fun timeSinceAlarm(): Duration {
+        return Duration.between(this.alarm.value ?: Instant.ofEpochMilli(0), Instant.now())
     }
 
     private fun stopConnection() {
@@ -184,6 +251,7 @@ class ConnectionService : Service() {
         Log.i(TAG, "onstartcommand")
         return START_STICKY
     }
+
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
         val showBabyphone = Intent(this, Babyphone::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
