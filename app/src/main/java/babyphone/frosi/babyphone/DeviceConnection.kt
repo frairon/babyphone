@@ -295,7 +295,7 @@ class DeviceConnection(val device: Device,
 //    }
 
 //    private fun handleVolume(volume: Point) {
-//        if (!alarmsEnabled) {
+//        if (!alarmEnabled) {
 //            return
 //        }
 //

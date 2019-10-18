@@ -25,6 +25,7 @@ import androidx.lifecycle.ViewModelProviders
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.viewpager.widget.ViewPager
 import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
+import babyphone.frosi.babyphone.databinding.SoundOptionsBinding
 import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
 import babyphone.frosi.babyphone.models.ImagePager
@@ -115,6 +116,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.hide_menu.setOnClickListener(this)
         this.inactive_blocker.setOnClickListener { true }
         this.btn_visual_settings.setOnClickListener(this)
+        this.btn_sound_settings.setOnClickListener(this)
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
         setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
@@ -185,7 +187,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 //        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
 //            volAlarmAuto.isEnabled = isChecked
 //            volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
-//            this.service?.alarmsEnabled = isChecked
+//            this.service?.alarmEnabled = isChecked
 //        }
 //        val viewPager = this.findViewById<View>(R.id.images) as ViewPager
 //        viewPager.adapter = imagePager
@@ -232,6 +234,18 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 popup.isFocusable = true
                 popup.isTouchable = true
                 popup.showAsDropDown(this.btn_visual_settings)
+            }
+            R.id.btn_sound_settings -> {
+
+                val inflater = this.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
+                val binding = DataBindingUtil.inflate<SoundOptionsBinding>(inflater, R.layout.sound_options, null, false)
+                val popup = PopupWindow(binding.root,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                binding.model = this.model
+
+                popup.isFocusable = true
+                popup.isTouchable = true
+                popup.showAsDropDown(this.btn_sound_settings)
             }
         }
     }
@@ -320,21 +334,27 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     private fun initVolumeGraph() {
-        val graph = findViewById(R.id.graph_volume) as GraphView
+        val graph = findViewById<GraphView>(R.id.graph_volume)
 
-        graph.addSeries(this.model.volumeSeries)
         graph.addSeries(this.model.thresholdSeries)
+        graph.addSeries(this.model.volumeSeries)
         graph.addSeries(this.model.alarmSeries)
 
-        this.model.alarmSeries.shape = PointsGraphSeries.Shape.TRIANGLE
-        this.model.alarmSeries.color = Color.MAGENTA
+        this.model.alarmSeries.shape = PointsGraphSeries.Shape.POINT
+        // TODO add color to style/resources
+        this.model.alarmSeries.color = Color.argb(128, 255, 0, 0)
+        this.model.alarmSeries.size = 8f
 
         graph.gridLabelRenderer.labelFormatter = DateAsXAxisLabelFormatter(this, SimpleDateFormat("HH:mm:ss"))
         this.model.volumeSeries.thickness = 4
 
+        this.model.thresholdSeries.isDrawBackground = true
 
-        this.model.thresholdSeries.color = Color.RED
+        // TODO add colors to style/resources
+        this.model.thresholdSeries.backgroundColor = Color.argb(25, 0, 255, 0)
+        this.model.thresholdSeries.color = Color.argb(30, 0, 255, 0)
         this.model.thresholdSeries.thickness = 2
+
         val vp = graph.viewport
         vp.isScrollable = false
         vp.isScalable = false
@@ -369,24 +389,26 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
     companion object {
-        val TAG = "babyphone"
-        val MAX_GRAPH_ELEMENTS = 120
-        val VIDEO_ACTIVITY_REQ_CODE = 1
-        val EXTRA_DEVICE_ADDR = "io.frosi.babyphone.device.addr"
+        const val TAG = "babyphone"
+        const val MAX_GRAPH_ELEMENTS = 300
+        const val VIDEO_ACTIVITY_REQ_CODE = 1
+        const val EXTRA_DEVICE_ADDR = "io.frosi.babyphone.device.addr"
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
 
-        Log.i("babyphone", "service connected")
-        this.service = (service as ConnectionService.ConnectionServiceBinder).service
-
-        if (this.service == null) {
+        if (service == null) {
             return
         }
+        Log.i("babyphone", "service connected")
+        val svc = (service as ConnectionService.ConnectionServiceBinder).service
 
-        this.model.connectService(this.service!!)
-        this.deviceModel.connectService(this.service!!)
-        this.player.connectService(this.service!!)
+
+        this.service = svc
+
+        this.model.connectService(svc)
+        this.deviceModel.connectService(svc)
+        this.player.connectService(svc)
 
 //        this.setConnectionStatus(this.service!!.connectionState, true)
 

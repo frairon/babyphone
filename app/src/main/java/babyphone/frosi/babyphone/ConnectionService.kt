@@ -17,6 +17,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
+import io.reactivex.subjects.ReplaySubject
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
 import java.io.Serializable
@@ -125,11 +126,11 @@ class ConnectionService : Service() {
             field = value
         }
 
-    var alarmsEnabled: Boolean = true
-
     var autoVolumeLevelEnabled: Boolean = true
-    var volumeThreshold = BehaviorSubject.create<Int>()
-    val alarm = BehaviorSubject.create<Instant>()
+
+    var volumeThreshold = ReplaySubject.create<Int>(Babyphone.MAX_GRAPH_ELEMENTS)
+    val alarm = ReplaySubject.create<Volume>(10)
+    var alarmEnabled = BehaviorSubject.create<Boolean>()
 
     private var connDisposables = CompositeDisposable()
 
@@ -160,6 +161,13 @@ class ConnectionService : Service() {
 
         // assume 50% volume per default
         volumeThreshold.onNext(50)
+
+        // enable alarms per default
+        alarmEnabled.onNext(true)
+    }
+
+    fun setAlarmEnabled(enabled:Boolean){
+        this.alarmEnabled.onNext(enabled)
     }
 
     fun connect(device: Device, reconnect: Boolean = true) {
@@ -187,11 +195,13 @@ class ConnectionService : Service() {
                 .startWith(MutableList(60) { -1 }.asIterable())
                 .buffer(60, 1)
                 .subscribe {
-                    if (this.autoVolumeLevelEnabled) {
-                        var valids = it.filter { it != -1 }
+                    if (this.autoVolumeLevelEnabled && this.alarmEnabled.value == true) {
+                        var valids = it.filter { it != -1 }.toIntArray()
                         if (valids.size > 10) {
-                            val newThreshold = (valids.map { v -> v.toDouble() }.average() + 10.0).roundToInt()
-                                this.volumeThreshold.onNext(newThreshold)
+                            valids.sort()
+                            val quant75 = valids.takeLast((valids.size.toDouble() * 0.25).toInt()).average()
+                            val newThreshold = (quant75 + 10.0).roundToInt()
+                            this.volumeThreshold.onNext(newThreshold)
                         } else {
                             this.volumeThreshold.onNext(50)
                         }
@@ -202,14 +212,14 @@ class ConnectionService : Service() {
     }
 
     private fun handleVolume(volume: Volume) {
-        if (!alarmsEnabled) {
+        if (alarmEnabled.value != true) {
             return
         }
 
         if (volume.volume > this.volumeThreshold.value!!
                 && this.timeSinceAlarm() > Duration.ofSeconds(10)) {
             // doAlarmVibrate()
-            this.alarm.onNext(Instant.now())
+            this.alarm.onNext(volume)
 
             val disableAlarmIntent = Intent(this, ConnectionService::class.java)
                     .setAction(ACTION_DISABLE_ALARM)
@@ -229,7 +239,8 @@ class ConnectionService : Service() {
     }
 
     private fun timeSinceAlarm(): Duration {
-        return Duration.between(this.alarm.value ?: Instant.ofEpochMilli(0), Instant.now())
+        val lastAlarmTs = this.alarm.value?.time?.time ?: 0L
+        return Duration.ofMillis(System.currentTimeMillis() - lastAlarmTs)
     }
 
     private fun stopConnection() {

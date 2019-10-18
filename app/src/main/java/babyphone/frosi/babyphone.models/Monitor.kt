@@ -51,6 +51,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     val motionDetection = MutableLiveData<Boolean>()
 
 
+    val alarmEnabled = MutableLiveData<Boolean>()
+
     private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
     private val loaderJob = Job()
@@ -71,6 +73,12 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         service?.conn?.updateConfig(Configuration(nightMode = nightMode))
     }
 
+    fun onSwitchAlarmEnabled(view: View, alarmEnabled: Boolean) {
+        Log.i(TAG, "setting alarm enabled to $alarmEnabled")
+        service?.setAlarmEnabled(alarmEnabled)
+    }
+
+
     fun onSwitchMotionDetection(view: View, motionDetection: Boolean) {
         service?.conn?.updateConfig(Configuration(motionDetection = motionDetection))
     }
@@ -87,6 +95,18 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 .subscribe {
                     this.thresholdSeries.appendData(DataPoint(Date(), it.toDouble()), true, MAX_GRAPH_ELEMENTS, true)
                 })
+
+        serviceDisposables.add(service.alarm
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    this.alarmSeries.appendData(DataPoint(it.time, it.volume.toDouble()), false, MAX_GRAPH_ELEMENTS, true)
+                })
+
+        serviceDisposables.add(service.alarmEnabled
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    alarmEnabled.postValue(it)
+                })
     }
 
     private fun updateConnection(conn: DeviceConnection) {
@@ -101,6 +121,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         })
 
         connDisposables.add(
+                // TODO replace debounce with sample
                 conn.volumes
                         .debounce(100, TimeUnit.MILLISECONDS)
                         .subscribe { volumeUpdated.onNext(it) }
