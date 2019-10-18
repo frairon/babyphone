@@ -73,7 +73,7 @@ class DeviceConnection(val device: Device,
 
     val volumes: Observable<Volume>
     private val alarms = ReplaySubject.createWithTimeAndSize<Alarm>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
-    val movement:Observable<Movement>
+    val movement: Observable<Movement>
 
     val systemStatus: Observable<DeviceOperation>
 
@@ -172,8 +172,8 @@ class DeviceConnection(val device: Device,
                 .autoConnect()
 
         movement = socket.observeActions()
-                .filter{it.action=="movement" && it.movement != null}
-                .map {it.movement!!}
+                .filter { it.action == "movement" && it.movement != null }
+                .map { it.movement!! }
         missingHeartbeat = socket.observeActions()
                 .filter { a -> a.action == "heartbeat" }
                 .window(20, TimeUnit.SECONDS, schedProvider.computation())
@@ -295,11 +295,11 @@ class DeviceConnection(val device: Device,
 //    }
 
 //    private fun handleVolume(volume: Point) {
-//        if (!alarmsEnabled) {
+//        if (!alarmEnabled) {
 //            return
 //        }
 //
-//        if (autoVolumeLevel) {
+//        if (volumeThreshold) {
 //            val threshold = history.getAutoVolumeThreshold()
 //            if (threshold != this.volumeThreshold) {
 //                // notify that the gui via broadcast

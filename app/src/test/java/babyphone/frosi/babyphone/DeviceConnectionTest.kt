@@ -9,6 +9,8 @@ import io.reactivex.subjects.PublishSubject
 import java.util.concurrent.TimeUnit
 
 class MockDeviceConnectionService() : DeviceConnectionService {
+    override fun sendAction(action: Action) {
+    }
 
     val webSocketEvents = PublishSubject.create<com.tinder.scarlet.WebSocket.Event>()
     val actionEvents = PublishSubject.create<Action>()
@@ -54,7 +56,7 @@ class DeviceConnectionTest {
     @Test
     fun TestVolumeReplay() {
 
-        val d = Device(hostIp = "1.2.3.4", hostname = "test")
+        val d = Device(name = "test", hostname = "test")
         val svc = MockDeviceConnectionService()
         val dc = DeviceConnection(d, socketFactory = { _, _ -> svc }, schedProvider = sched)
 
@@ -88,7 +90,7 @@ class DeviceConnectionTest {
 
     @Test
     fun TestMissingHeartbeat() {
-        val d = Device(hostIp = "1.2.3.4", hostname = "test")
+        val d = Device(name = "test", hostname = "test")
         val svc = MockDeviceConnectionService()
         val dc = DeviceConnection(d, socketFactory = { _, _ -> svc }, schedProvider = sched)
 
@@ -109,7 +111,7 @@ class DeviceConnectionTest {
 
     @Test
     fun testConnectionState() {
-        val d = Device(hostIp = "1.2.3.4", hostname = "test")
+        val d = Device(name = "test", hostname = "test")
         val svc = MockDeviceConnectionService()
         val dc = DeviceConnection(d, socketFactory = { _, _ -> svc }, schedProvider = sched)
 
@@ -126,5 +128,19 @@ class DeviceConnectionTest {
         // it only gets the recent proxyState
         tester2.assertValueAt(0, DeviceConnection.ConnectionState.Connected)
         tester2.assertValueCount(1)
+    }
+
+    @Test
+    fun testWindow() {
+        val ob = Observable.fromArray("a", "b", "c", "d", "e")
+                .startWith("")
+                .buffer(3, 1)
+//                .map {
+//                    it.remove("")
+//                    it
+//                }
+//                .filter { it.count() > 1 }
+
+        println(ob.test().values().toString())
     }
 }
