@@ -22,14 +22,8 @@ autostart:
 	sudo systemctl daemon-reload
 	sudo systemctl restart babyphone
 
-
-# host used in Meadow network
-MHOST=pi@babyphone
-deploy-babyphone2:
-	ssh ${MHOST} 'mkdir -p /home/pi/babyphone2'
-	rsync -av . --exclude app --exclude-from .gitignore --exclude babyphone --exclude .git ${MHOST}:/home/pi/babyphone2/
-	rsync -av ./babyphone/ --exclude-from .gitignore --exclude .git ${MHOST}:/home/pi/babyphone2/babyphone2
-	ssh ${MHOST} 'cd /home/pi/babyphone2 && sudo python3 setup.py install'
+	# to run on systemstart do
+	# sudo systemctl enable babyphone
 
 
 # Packages to install

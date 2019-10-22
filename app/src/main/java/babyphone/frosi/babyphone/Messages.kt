@@ -16,7 +16,7 @@ class ConnectionStateUpdated(val state: DeviceConnection.ConnectionState,
                              val device: Device?)
 
 class VideoFrame(val data: ByteArray,
-                 val offset: Int,
+                 val pts: Long,
                  val timestamp: Long,
                  val type: Type,
                  val partial: Boolean) {
@@ -69,12 +69,16 @@ data class Action(
         @Json(name = "value") val value: Double = 0.0,
         @Json(name = "status") val status: String = "",
         @Json(name = "type") val type: Int = 0,
-        @Json(name = "offset") val offset: Int = 0,
         @Json(name = "time") val time: Long = 0,
         @Json(name = "partial") val partial: Boolean = false,
         @Json(name = "data") val data: String = "",
+        // pts = presentation time stamp
+        @Json(name = "pts") val pts: Long = 0,
+        // wall clock timestamp
+        @Json(name = "timestamp") val timestamp: Long = 0,
         @Json(name = "configuration") val configuration: Configuration? = null,
-        @Json(name = "movement") val movement: Movement? = null
+        @Json(name = "movement") val movement: Movement? = null,
+        @Json(name = "audio") val audio: Audio? = null
 )
 
 data class Volume(val time: Date, val volume: Int)
@@ -89,6 +93,12 @@ data class Movement(
 data class Configuration(
         @Json(name = "night_mode") val nightMode: Boolean? = null,
         @Json(name = "motion_detection") val motionDetection: Boolean? = null
+)
+
+data class Audio(
+        @Json(name = "data") val data: String = "",
+        @Json(name = "pts") val pts: Long = 0,
+        @Json(name = "timestamp") val timestamp: Long = 0
 )
 
 interface DeviceConnectionService {
