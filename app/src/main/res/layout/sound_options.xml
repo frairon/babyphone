@@ -15,7 +15,15 @@
             android:layout_height="wrap_content"
             android:checked="@{model.alarmEnabled}"
             android:onCheckedChanged="@{model.onSwitchAlarmEnabled}"
-            android:text="Alarm enabled" />
+            android:text="Alarms" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/swt_auto_sound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="@{model.autoSoundEnabled}"
+            android:onCheckedChanged="@{model.onAutoSoundEnabled}"
+            android:text="Auto sound forwarding" />
 
 
     </androidx.appcompat.widget.LinearLayoutCompat>

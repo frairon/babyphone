@@ -15,6 +15,7 @@ import com.jjoe64.graphview.series.LineGraphSeries
 import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
 import kotlinx.coroutines.CoroutineScope
@@ -50,15 +51,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     val motionDetection = MutableLiveData<Boolean>()
 
+    val audioPlaying = MutableLiveData<Boolean>()
+
 
     val alarmEnabled = MutableLiveData<Boolean>()
-
-    private var serviceBroadcastReceiver: BroadcastReceiver? = null
-
-    private val loaderJob = Job()
-    private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
-
-    private val uiScope = UiLifecycleScope()
+    val autoSoundEnabled = MutableLiveData<Boolean>()
 
     private val serviceDisposables = CompositeDisposable()
     private var connDisposables = CompositeDisposable()
@@ -66,15 +63,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     init {
         livePicture.value = false
         motionDetection.value = false
+        audioPlaying.value = false
     }
 
     fun onSwitchNightMode(view: View, nightMode: Boolean) {
-        Log.i(TAG, "switching night mode to $nightMode")
         service?.conn?.updateConfig(Configuration(nightMode = nightMode))
     }
 
     fun onSwitchAlarmEnabled(view: View, alarmEnabled: Boolean) {
-        Log.i(TAG, "setting alarm enabled to $alarmEnabled")
         service?.setAlarmEnabled(alarmEnabled)
     }
 
@@ -83,30 +79,53 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         service?.conn?.updateConfig(Configuration(motionDetection = motionDetection))
     }
 
+    fun onAutoSoundEnabled(view: View, autoSoundEnabled: Boolean) {
+        service?.setAutoSoundEnabled(autoSoundEnabled)
+    }
+
+    fun onToggleAudio() {
+        service?.toggleAudio()
+    }
+
     fun connectService(service: ConnectionService) {
         this.service = service
 
-        serviceDisposables.add(service.connections.subscribe { conn ->
-            this.updateConnection(conn)
-        })
+        service.connections
+                .subscribe { conn ->
+                    this.updateConnection(conn)
+                }
+                .addTo(serviceDisposables)
 
-        serviceDisposables.add(service.volumeThreshold
+        service.volumeThreshold
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     this.thresholdSeries.appendData(DataPoint(Date(), it.toDouble()), true, MAX_GRAPH_ELEMENTS, true)
-                })
+                }
+                .addTo(serviceDisposables)
 
-        serviceDisposables.add(service.alarm
+        service.alarm
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     this.alarmSeries.appendData(DataPoint(it.time, it.volume.toDouble()), false, MAX_GRAPH_ELEMENTS, true)
-                })
+                }
+                .addTo(serviceDisposables)
 
-        serviceDisposables.add(service.alarmEnabled
-                .observeOn(AndroidSchedulers.mainThread())
+        service.alarmEnabled
                 .subscribe {
                     alarmEnabled.postValue(it)
-                })
+                }
+                .addTo(serviceDisposables)
+        service.autoSoundEnabled
+                .subscribe {
+                    autoSoundEnabled.postValue(it)
+                }
+                .addTo(serviceDisposables)
+
+        service.audioPlayStatus
+                .subscribe {
+                    audioPlaying.postValue(it)
+                }
+                .addTo(serviceDisposables)
     }
 
     private fun updateConnection(conn: DeviceConnection) {
@@ -115,20 +134,23 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         connDisposables.clear()
         connDisposables = CompositeDisposable()
 
-        connDisposables.add(conn.volumes.observeOn(AndroidSchedulers.mainThread()).subscribe { vol ->
-            volumeSeries
-                    .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
-        })
+        conn.volumes
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe { vol ->
+                    volumeSeries
+                            .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
+                }
+                .addTo(connDisposables)
 
-        connDisposables.add(
-                // TODO replace debounce with sample
-                conn.volumes
-                        .debounce(100, TimeUnit.MILLISECONDS)
-                        .subscribe { volumeUpdated.onNext(it) }
-        )
 
-        connDisposables.add(
-                conn.config.subscribe { cfg ->
+        // TODO replace debounce with sample
+        conn.volumes
+                .debounce(100, TimeUnit.MILLISECONDS)
+                .subscribe { volumeUpdated.onNext(it) }
+                .addTo(connDisposables)
+
+        conn.config
+                .subscribe { cfg ->
                     Log.d(TAG, "got new config$cfg")
                     if (cfg.motionDetection != null) {
                         motionDetection.postValue(cfg.motionDetection)
@@ -137,13 +159,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                         nightMode.postValue(cfg.nightMode)
                     }
                 }
-        )
+                .addTo(connDisposables)
 
-        connDisposables.add(conn.movement.subscribe { movementUpdated.onNext(it) })
+        conn.movement.subscribe { movementUpdated.onNext(it) }
+                .addTo(connDisposables)
 
 
         val movementPictureLoadedDisp = conn.movement
-                .observeOn(Schedulers.io())
+
                 .startWith(Movement(0.0, false, 0))
                 .map {
                     try {
@@ -153,7 +176,6 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                         val connection = url.openConnection()
                         val pictureTime = connection.getHeaderField("picture-time")
                         val inputStream = connection.content as InputStream
-                        Log.d(TAG, "...success!")
                         val time = Instant.ofEpochSecond(pictureTime.toLong())
 
                         Babyphone.TimedDrawable(
@@ -166,6 +188,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 .filter { it != Babyphone.TimedDrawable.INVALID }
+                .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     Log.d(TAG, "adding image to imagepager in thread ${Thread.currentThread().name}")

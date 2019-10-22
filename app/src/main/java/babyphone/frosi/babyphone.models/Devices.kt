@@ -173,6 +173,4 @@ class ViewUtils(private val ctx: Context) {
             else -> cs.toString()
         }
     }
-
-
 }

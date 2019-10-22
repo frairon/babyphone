@@ -1,7 +1,10 @@
 package babyphone.frosi.babyphone
 
 import android.animation.ValueAnimator
-import android.content.*
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -11,9 +14,6 @@ import android.util.Log
 import android.view.*
 import android.view.animation.LinearInterpolator
 import android.widget.PopupWindow
-import android.widget.SeekBar
-import androidx.annotation.UiThread
-import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
@@ -22,8 +22,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModelProviders
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import androidx.viewpager.widget.ViewPager
 import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
 import babyphone.frosi.babyphone.databinding.SoundOptionsBinding
 import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
@@ -35,21 +33,17 @@ import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
-import com.jjoe64.graphview.series.DataPoint
 import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.conn_details.*
+import kotlinx.android.synthetic.main.monitor_audio.*
 import kotlinx.android.synthetic.main.monitor_picture.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import org.threeten.bp.Instant
-import java.io.InputStream
-import java.net.URL
 import java.text.SimpleDateFormat
 import kotlin.coroutines.CoroutineContext
 
@@ -75,8 +69,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
 
     var service: ConnectionService? = null
-
-    private var serviceBroadcastReceiver: BroadcastReceiver? = null
 
     private val loaderJob = Job()
     private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
@@ -117,6 +109,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.inactive_blocker.setOnClickListener { true }
         this.btn_visual_settings.setOnClickListener(this)
         this.btn_sound_settings.setOnClickListener(this)
+        this.btn_play_audio.setOnClickListener(this)
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
         setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
@@ -159,44 +152,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                     ani.start()
                 })
 
-//        val activity = this
-//
-//        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-//        setVolumeThresholdIcon()
-//        volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-//            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-//            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-//
-//            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-//                activity.service?.volumeThreshold = volumeSeek.progress
-//
-//                activity.setGraphThreshold(progress)
-//
-//                activity.setVolumeThresholdIcon()
-//            }
-//        })
-//        setGraphThreshold(volumeSeek.progress)
-//
-//        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-//        volAlarmAuto.setOnCheckedChangeListener { _, isChecked ->
-//            volumeSeek.isEnabled = !isChecked
-//            activity.service?.volumeThreshold = isChecked
-//        }
-//
-//        val volAlarmEnabled = this.findViewById<View>(R.id.vol_alarm_enabled) as Switch
-//        volAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
-//            volAlarmAuto.isEnabled = isChecked
-//            volumeSeek.isEnabled = isChecked && !volAlarmAuto.isChecked
-//            this.service?.alarmEnabled = isChecked
-//        }
-//        val viewPager = this.findViewById<View>(R.id.images) as ViewPager
-//        viewPager.adapter = imagePager
-//
-//        volAlarmAuto.isEnabled = volAlarmEnabled.isChecked
-//        volumeSeek.isEnabled = volAlarmEnabled.isChecked && !volAlarmAuto.isChecked
-//        activity.service?.volumeThreshold = volAlarmAuto.isChecked
-
-        connectToServiceBroadcast()
         ConnectionService.startService(this)
         this.bindService(Intent(this, ConnectionService::class.java), this, 0)
     }
@@ -230,6 +185,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 val popup = PopupWindow(binding.root,
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 binding.model = this.model
+                binding.lifecycleOwner = this
 
                 popup.isFocusable = true
                 popup.isTouchable = true
@@ -242,94 +198,20 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 val popup = PopupWindow(binding.root,
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 binding.model = this.model
+                binding.lifecycleOwner = this
+
 
                 popup.isFocusable = true
                 popup.isTouchable = true
                 popup.showAsDropDown(this.btn_sound_settings)
             }
+            R.id.btn_play_audio -> this.model.onToggleAudio()
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-    }
-
-    override fun onStop() {
-        super.onStop()
     }
 
     class TimedDrawable(val drawable: Drawable, val instant: Instant) {
         companion object {
             val INVALID = TimedDrawable(ColorDrawable(), Instant.now())
-        }
-    }
-
-    fun loadAndShowImage() {
-        loaderScope.launch {
-            val uri = service?.getMotionUrl()
-            if (uri != null) {
-                val timedImage = loadMotionImage(uri)
-                if (timedImage != null) {
-                    uiScope.launch {
-                        displayMotionImage(timedImage)
-                        val viewPager = findViewById<View>(R.id.images) as ViewPager
-                        Log.d("babyphone", "updating current view pager item to " + imagePager.getCount())
-                        viewPager.setCurrentItem(imagePager.getCount(), true)
-                    }
-                }
-
-            }
-        }
-    }
-
-    @WorkerThread
-    fun loadMotionImage(uri: String): TimedDrawable? {
-
-        try {
-            val url = URL(uri)
-            Log.d("babyphone", "loading image from " + uri)
-            val connection = url.openConnection()
-            val pictureTime = connection.getHeaderField("picture-time")
-            val inputStream = connection.getContent() as InputStream
-            Log.d("babyphone", "...success!")
-            return TimedDrawable(
-                    Drawable.createFromStream(inputStream, "src name"),
-                    Instant.ofEpochSecond(pictureTime.toLong())
-            )
-        } catch (e: Exception) {
-            Log.e("babyphone", "Error loading image " + e)
-            return null
-        }
-    }
-
-    @UiThread
-    fun displayMotionImage(image: TimedDrawable) {
-        Log.d("babyhpone", "displaying image")
-        imagePager.addImage(image)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        when (requestCode) {
-            VIDEO_ACTIVITY_REQ_CODE -> {
-//                if (data != null) {
-//                    useLights = data.getBooleanExtra("lights", false)
-//                }
-            }
-        }
-    }
-
-    fun setVolumeThresholdIcon() {
-
-        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-        val progress = volumeSeek.progress
-        if (progress == 0 || progress == 100) {
-            volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_off_black_24dp)
-        } else if (progress < 50) {
-            volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_down_black_24dp)
-        } else {
-            volumeSeek.thumb = ContextCompat.getDrawable(this, R.drawable.ic_volume_up_black_24dp)
         }
     }
 
@@ -382,17 +264,11 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     override fun onServiceDisconnected(name: ComponentName?) {
         this.service = null
-        if (this.serviceBroadcastReceiver != null) {
-            Log.i("babyphone", "service disconnected, will unregister receiver")
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(this.serviceBroadcastReceiver!!)
-        }
     }
 
     companion object {
         const val TAG = "babyphone"
         const val MAX_GRAPH_ELEMENTS = 300
-        const val VIDEO_ACTIVITY_REQ_CODE = 1
-        const val EXTRA_DEVICE_ADDR = "io.frosi.babyphone.device.addr"
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -410,67 +286,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.deviceModel.connectService(svc)
         this.player.connectService(svc)
 
-//        this.setConnectionStatus(this.service!!.connectionState, true)
-
-//        this.initVolumeHistory()
-
-//        val volumeSeek = this.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-//        volumeSeek.progress = this.service!!.volumeThreshold
-//        this.setGraphThreshold(volumeSeek.progress)
-
-//        val volAlarmAuto = this.findViewById<View>(R.id.vol_alarm_auto) as Switch
-//        this.service!!.volumeThreshold = volAlarmAuto.isChecked
     }
-
-//    fun initVolumeHistory() {
-//        if (this.service == null) {
-//            return
-//        }
-//
-//        val alarmPoints = this.service!!.history.alarms.map { it -> DataPoint(Date(it.toEpochMilli()), 0.0) }
-//        this.alarmSeries.resetData(alarmPoints.toTypedArray())
-//
-//        val dataPoints = this.service!!.history.volumes.map { it -> DataPoint(it.time, it.volume.toDouble()) }
-//        this.volumeSeries.resetData(dataPoints.toTypedArray())
-//
-//        val movementPoints = this.service!!.history.movements.map { it -> DataPoint(it.time, it.volume.toDouble()) }
-//        this.movementSeries.resetData(movementPoints.toTypedArray())
-
-//        val graph = this.findViewById(R.id.graph_volume) as GraphView?
-//
-//        graph?.viewport?.setMinX(model.volumeSeries.lowestValueX)
-//        graph?.viewport?.setMaxX(model.volumeSeries.highestValueX)
-//    }
-
-//    fun setConnectionStatus(proxyState: ConnectionService.ConnectionState, setButton: Boolean = false) {
-//
-//        val actionbar = supportActionBar!!
-//
-//        when (proxyState) {
-//            ConnectionService.ConnectionState.Connecting -> {
-//                runOnUiThread {
-//                    actionbar.subtitle = "connecting to..."
-//                }
-//            }
-//            ConnectionService.ConnectionState.Connected -> {
-//                runOnUiThread {
-//                    actionbar.subtitle = "connected to "
-//                }
-//
-//                loadAndShowImage()
-//            }
-//            ConnectionService.ConnectionState.Disconnected -> {
-//                runOnUiThread {
-//                    actionbar.subtitle = "disconnected"
-//                }
-//            }
-//        }
-//    }
-
-//    @Subscribe(threadMode = ThreadMode.POSTING)
-//    fun handleConnnectionState(cu: ConnectionStateUpdated) {
-//        setConnectionStatus(cu.proxyState)
-//    }
 
     override fun onResume() {
         super.onResume()
@@ -486,52 +302,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
             this.player.stop()
         }
     }
-
-    private fun connectToServiceBroadcast() {
-        val activity = this
-
-        this.serviceBroadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    ConnectionService.ACTION_MOVEMENT_RECEIVED -> {
-                        val vol = intent.getSerializableExtra(ConnectionService.ACTION_EXTRA_MOVEMENT) as Point?
-                        if (vol == null) {
-                            Log.e("babyphone", "Receivd null movement in movement intent. Ignoring.")
-                            return
-                        }
-
-//                        activity.addMovementToGraph(vol)
-
-                        loadAndShowImage()
-                    }
-                    ConnectionService.ACTION_ALARM_TRIGGERED -> {
-//                        activity.alarmSeries.appendData(DataPoint(Date(), 0.0), false, MAX_GRAPH_ELEMENTS)
-                    }
-                    ConnectionService.ACTION_AUTOTHRESHOLD_UPDATED -> {
-                        val volume = intent.getIntExtra(ConnectionService.ACTION_EXTRA_VOLUME, 50)
-//                        setGraphThreshold(volume)
-                        val volumeSeek = activity.findViewById<View>(R.id.vol_alarm_seeker) as SeekBar
-                        volumeSeek.progress = volume
-                    }
-                    else -> {
-                        Log.w("websocket", "unhandled action in intent:" + intent.action)
-                    }
-                }
-            }
-        }
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-                this.serviceBroadcastReceiver!!,
-                ConnectionService.createActionIntentFilter()
-        )
-    }
-
-
-//    fun addMovementToGraph(vol: Point) {
-//        val newPoint = DataPoint(vol.time, vol.volume.toDouble())
-//        runOnUiThread {
-//            movementSeries.appendData(newPoint, true, MAX_GRAPH_ELEMENTS)
-//        }
-//    }
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         if (menu == null) {

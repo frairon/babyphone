@@ -21,29 +21,18 @@
                 tools:context=".BabyphoneContent"
                 tools:showIn="@layout/activity_monitor">
 
-                <com.jjoe64.graphview.GraphView
-                    android:background="@drawable/border"
-                    android:id="@+id/graph_volume"
+
+
+                <include
+                    android:id="@+id/monitor_audio"
+                    layout="@layout/monitor_audio"
+                    app:layout_constraintTop_toBottomOf="@id/monitor_picture"
                     android:layout_width="0dp"
-                    android:layout_height="150dp"
-                    android:layout_marginLeft="8dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginRight="8dp"
+                    android:layout_height="wrap_content"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/monitor_picture" />
-
-                <ImageButton
-                    android:id="@+id/btn_sound_settings"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintTop_toTopOf="@id/graph_volume"
-                    app:layout_constraintStart_toStartOf="@id/graph_volume"
-                    android:layout_margin="16dp"
-                    android:padding="4dp"
-                    android:background="#B4DDDDDD"
-                    android:src="@drawable/ic_settings_black_24dp" />
-
+                    app:model="@{model}"
+                    />
 
                 <include
                     android:id="@+id/monitor_picture"

@@ -2,11 +2,11 @@ import alsaaudio
 import sys
 import audioop
 import numpy as np
-inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device='dmic_sv')
+inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL)
 inp.setchannels(2)
 inp.setrate(48000)
 inp.setformat(alsaaudio.PCM_FORMAT_S32_LE)
-inp.setperiodsize(320)
+inp.setperiodsize(160)
 
 import math
 
@@ -32,51 +32,33 @@ import math
 
 
 # buf = ffi.new("char[%d]"%maxBuffers[0])
+def process(out, alawout):
+    state = None
+    while True:
+        l, data = inp.read()
+
+        if l:
+            data = audioop.tomono(data, 4, 1, 1)
+            # data = audioop.mul(data, 4, 4)
+            (data, state) = audioop.ratecv(data, 4, 1, 48000, 8000, state)
+            avg = audioop.rms(data, 4)
+
+            alaw = audioop.lin2alaw(data, 4)
+
+            if a and i and a != i:
+                level = float(avg - i) / float(a-i)
+                print("."*int(level*100))
+
+            out.write(data)
+            alawout.write(alaw)
+
 try:
     i = 1
     a = (1<<32)-1
-    with open("audio.raw", "wb") as out:
-        while True:
-            l, data = inp.read()
-            # npbuf = np.frombuffer(data, dtype=np.dtype('<i4'))
+    with open("audio.alaw", "wb") as alawout:
+        with open("audio.raw", "wb") as out:
+            process(out, alawout)
 
-            # print(l, len(data), len(npbuf))
-
-            if l:
-                data = audioop.tomono(data, 4, 1, 1)
-                data = audioop.mul(data, 4, 4)
-                avg = audioop.rms(data, 4)
-                # p = False
-                # avg = math.sqrt(avg)
-                # if i == 0 or avg < i:
-                #     p = True
-                #     i = avg
-                #
-                # if a == 0 or avg > a:
-                #     p = True
-                #     a = avg
-
-                # if p:
-                #     print("min=%d, max=%d" % (i,a))
-
-                if a and i and a != i:
-                    level = float(avg - i) / float(a-i)
-                    print("."*int(level*100))
-
-
-
-                # val = ffi.cast("int32_t*", npbuf.ctypes.data)
-                # numBufs = lib.faacEncEncode(encoder, val, 160, buf, maxBuffers[0])
-
-                # int FAACAPI faacEncEncode(faacEncHandle hEncoder, int32_t * inputBuffer, unsigned int samplesInput,
-        		# 	 unsigned char *outputBuffer,
-        		# 	 unsigned int bufferSize);
-                # used = buf[0:numBufs]
-                # print(len(used))
-                # b = np.frombuffer(ffi.buffer(buf, numBufs), dtype=np.ubyte)
-
-                # print(numBufs, len(b))
-                out.write(data)
 
 finally:
     pass

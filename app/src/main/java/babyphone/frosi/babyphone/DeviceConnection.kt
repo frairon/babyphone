@@ -17,6 +17,7 @@ import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.functions.BiFunction
+import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.mergeAllSingles
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
@@ -75,15 +76,18 @@ class DeviceConnection(val device: Device,
     private val alarms = ReplaySubject.createWithTimeAndSize<Alarm>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
     val movement: Observable<Movement>
 
+    val audio: Observable<Audio>
+
     val systemStatus: Observable<DeviceOperation>
 
     val missingHeartbeat: Observable<Long>
 
-    val connectionState: Observable<ConnectionState>
+    val connectionState = BehaviorSubject.create<ConnectionState>()
 
     val frames: Observable<VideoFrame>
 
     val config: Observable<Configuration>
+
 
     enum class ConnectionState {
         Disconnected,
@@ -133,7 +137,7 @@ class DeviceConnection(val device: Device,
         // The combiner function (BiFunction) checks both events and converts it into our
         // correct ConnectionState.
         // The observable is triggered on both events (websocket event and lifecycle event)
-        connectionState = Observable.combineLatest(socket.observeWebSocketEvent()
+        val connStateDisp = Observable.combineLatest(socket.observeWebSocketEvent()
                 .filter { data ->
                     data is WebSocket.Event.OnConnectionClosed
                             || data is WebSocket.Event.OnConnectionClosing
@@ -151,8 +155,10 @@ class DeviceConnection(val device: Device,
                         ConnectionState.Disconnected
                     }
                 })
-                .startWith(ConnectionState.Connecting)
-                .replay(1).autoConnect()
+                .startWith(ConnectionState.Connecting).subscribe {
+                    this.connectionState.onNext(it)
+                }
+        disposables.add(connStateDisp)
 
         // send a configuration-request every time we get a connection
         disposables.add(this.socket.observeWebSocketEvent().subscribe {
@@ -195,13 +201,14 @@ class DeviceConnection(val device: Device,
                 .filter { a -> a.action == "vframe" }
                 .map {
                     VideoFrame(
-                            Base64.decode(it.data, Base64.DEFAULT),
-                            it.offset,
-                            it.time,
-                            VideoFrame.Type.fromInt(it.type),
-                            it.partial
+                            data = Base64.decode(it.data, Base64.DEFAULT),
+                            pts = it.pts,
+                            timestamp = it.timestamp,
+                            type = VideoFrame.Type.fromInt(it.type),
+                            partial = it.partial
                     )
                 }
+
 
         val cfgConnector = socket.observeActions()
                 .filter { it.action == "configuration" && it.configuration != null }
@@ -214,6 +221,10 @@ class DeviceConnection(val device: Device,
                 .replay(1)
         disposables.add(cfgConnector.connect())
         config = cfgConnector
+
+        audio = socket.observeActions()
+                .filter { it.action == "audio" && it.audio?.data != "" }
+                .map { it.audio!! }
 
         // start the connection after we have wired up the Observables
         connLifecycle.start()
@@ -344,5 +355,13 @@ class DeviceConnection(val device: Device,
 
     fun restart() {
         this.socket.sendAction(Action(action = "restart"))
+    }
+
+    fun startAudio() {
+        this.socket.sendAction(Action(action = "startaudio"))
+    }
+
+    fun stopAudio() {
+        this.socket.sendAction(Action(action = "stopaudio"))
     }
 }

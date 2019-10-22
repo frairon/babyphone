@@ -167,15 +167,26 @@ class Babyphone(object):
 
             maxRms = (1 << 31) - 1  # only 15 because it's signed
             lastSent = time.time()
+
+            start = time.time()
+
+            sampleState = None
             while not event.is_set():
                 l, data = inp.read()
 
                 if l:
                     try:
                         data = audioop.tomono(data, 4, 1, 1)
-                        data = audioop.mul(data, 4, 4)
+                        (data, sampleState) = audioop.ratecv(
+                            data, 4, 1, 48000, 8000, sampleState
+                        )
+                        data = audioop.mul(data, 4, 2)
                         rms = audioop.rms(data, 4)
 
+                        asyncio.run_coroutine_threadsafe(
+                            self._multicastAudio(audioop.lin2alaw(data, 4), time.time()-start),
+                            loop=self._loop,
+                        )
                         if time.time() - lastSent >= 1.0:
                             level = float(rms) / float(maxRms)
                             lastSent = time.time()
@@ -204,6 +215,19 @@ class Babyphone(object):
             yield from self.setMotionDetection(motionDetection)
 
         yield from self.broadcastConfig()
+
+    @asyncio.coroutine
+    def _multicastAudio(self, audioData, relativeTime):
+        msg = dict(
+            action="audio",
+            audio=dict(
+                data=base64.b64encode(bytes(audioData)).decode("ascii"),
+                pts=int(relativeTime * 1000000),
+            ),
+        )
+        for conn in self.conns:
+            if conn.audioRequested:
+                yield from conn._send(msg)
 
     @asyncio.coroutine
     def broadcastConfig(self):
@@ -260,8 +284,8 @@ class Babyphone(object):
                 frame = self.cam.frame
                 msg = dict(
                     action="vframe",
-                    offset=frame.position,
-                    timestamp=frame.timestamp,
+                    pts=frame.timestamp,
+                    timestamp=int(time.time()*1000000),
                     data=base64.b64encode(bytes(self._data)).decode("ascii"),
                     type=0,
                 )
@@ -359,6 +383,7 @@ class Connection(object):
 
         self.useLights = False
         self.streamRequested = False
+        self.audioRequested = False
 
         log.info("Client connected")
 
@@ -422,6 +447,10 @@ class Connection(object):
         elif msg["action"] == "_stopstream":
             self.streamRequested = False
             yield from self.bp.streamStatusUpdated()
+        elif msg["action"] == "startaudio":
+            self.audioRequested = True
+        elif msg["action"] == "stopaudio":
+            self.audioRequested = False
         elif msg["action"] == "motiondetect":
             if msg.get("value", False):
                 self.motion.start()
