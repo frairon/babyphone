@@ -114,16 +114,17 @@ class ConnectionService : Service() {
         this.connDisposables.clear()
         this.connDisposables = CompositeDisposable()
 
-        this.connDisposables.add(conn.volumes
+        conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     if (alarmEnabled.value == true
                             && it.volume > this.volumeThreshold.value!!) {
                         this.alarm.onNext(it)
                     }
-                })
+                }
+                .addTo(this.connDisposables)
 
-        this.connDisposables.add(conn.volumes
+        conn.volumes
                 .observeOn(Schedulers.computation())
                 .map { it.volume }
                 .startWith(MutableList(120) { -1 }.asIterable())
@@ -133,16 +134,18 @@ class ConnectionService : Service() {
                         var valids = it.filter { it != -1 }.toIntArray()
                         if (valids.size > 10) {
                             valids.sort()
-                            val quant75 = valids.takeLast((valids.size.toDouble() * 0.25).toInt()).average()
-                            val newThreshold = (quant75 + 10.0).roundToInt()
+                            val quant75 = valids.get((valids.size.toDouble() * 0.75).toInt())
+                            val median = valids.get(valids.size / 2)
+                            val newThreshold = (quant75 + median + 10)
                             this.volumeThreshold.onNext(newThreshold)
                         } else {
                             this.volumeThreshold.onNext(50)
                         }
                     }
-                })
+                }
+                .addTo(this.connDisposables)
 
-        this.connDisposables.add(this.alarm
+        this.alarm
                 .filter {
                     // ignore outdated alarms in case we're doing a replay
                     it.time.after(Date(System.currentTimeMillis() - 100))
@@ -163,10 +166,11 @@ class ConnectionService : Service() {
                         builder.setContentText("Luise is crying")
                         builder.addAction(R.drawable.ic_snooze_black_24dp, "snooze", disableAlarmPending);
                     }, isAlarm = true)
-                })
+                }
+                .addTo(connDisposables)
 
 
-        this.connDisposables.add(this.alarm
+        this.alarm
                 .filter {
                     // ignore outdated alarms in case we're doing a replay
                     it.time.after(Date(System.currentTimeMillis() - 100))
@@ -187,7 +191,8 @@ class ConnectionService : Service() {
                             }
                         }.addTo(this.connDisposables)
                     }
-                })
+                }
+                .addTo(connDisposables)
         // connecting to different device -> stop audio of previous
         this.stopAudio()
 

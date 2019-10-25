@@ -84,7 +84,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     private var motionReloadAnimator: ValueAnimator? = null
 
-    private val player = Player()
+    private val player = VideoPlayer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
