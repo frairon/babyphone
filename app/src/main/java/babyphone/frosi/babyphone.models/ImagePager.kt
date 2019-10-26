@@ -1,6 +1,7 @@
 package babyphone.frosi.babyphone.models
 
 import android.content.Context
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,11 +23,16 @@ class ImagePager(val mContext: Context, private val maxcount: Int = 10) : PagerA
     private var mLayoutInflater: LayoutInflater? = null
     private val mPageList: MutableList<Babyphone.TimedDrawable> = ArrayList<Babyphone.TimedDrawable>()
 
+    companion object {
+        const val TAG = "imagepager"
+    }
+
     val sizeUpdated = BehaviorSubject.create<Int>()
 
     fun addImage(img: Babyphone.TimedDrawable) {
         // if we have that timestamp already, ignore it
         if (mPageList.find { d -> d.instant == img.instant } != null) {
+            Log.d(TAG, "same image timestamp. will ignore it")
             return
         }
 

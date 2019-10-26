@@ -280,12 +280,13 @@ class Babyphone(object):
             self._data.extend(data)
             # log.info("checking for frame complete")
             if self.cam.frame.complete:
-                # log.info("got frame %s: %s", str(self.cam.frame), self._data[:10])
                 frame = self.cam.frame
+                log.info("got frame %s", str(frame.timestamp))
                 msg = dict(
                     action="vframe",
                     pts=frame.timestamp,
-                    timestamp=int(time.time()*1000000),
+                    offset=frame.position,
+                    timestamp=frame.timestamp ,
                     data=base64.b64encode(bytes(self._data)).decode("ascii"),
                     type=0,
                 )

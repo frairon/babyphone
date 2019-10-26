@@ -109,7 +109,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.inactive_blocker.setOnClickListener { true }
         this.btn_visual_settings.setOnClickListener(this)
         this.btn_sound_settings.setOnClickListener(this)
-        this.btn_play_audio.setOnClickListener(this)
 
 //        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
         setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
@@ -205,7 +204,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 popup.isTouchable = true
                 popup.showAsDropDown(this.btn_sound_settings)
             }
-            R.id.btn_play_audio -> this.model.onToggleAudio()
         }
     }
 

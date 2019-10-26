@@ -40,7 +40,7 @@ def process(out, alawout):
         if l:
             data = audioop.tomono(data, 4, 1, 1)
             # data = audioop.mul(data, 4, 4)
-            (data, state) = audioop.ratecv(data, 4, 1, 48000, 8000, state)
+            # (data, state) = audioop.ratecv(data, 4, 1, 48000, 8000, state)
             avg = audioop.rms(data, 4)
 
             alaw = audioop.lin2alaw(data, 4)

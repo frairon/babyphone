@@ -210,7 +210,6 @@ class DeviceConnection(val device: Device,
                     )
                 }
 
-
         val cfgConnector = socket.observeActions()
                 .filter { it.action == "configuration" && it.configuration != null }
                 .map { it.configuration!! }

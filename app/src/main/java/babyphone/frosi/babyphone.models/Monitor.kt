@@ -18,9 +18,7 @@ import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.*
 import okhttp3.internal.waitMillis
 import org.threeten.bp.Instant
 import java.io.InputStream
@@ -44,6 +42,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     val livePicture = MutableLiveData<Boolean>()
     val imagePager = ImagePager(application)
+    val downloadingImage = MutableLiveData<Boolean>()
 
     val connectionState = MutableLiveData<DeviceConnection.ConnectionState>()
 
@@ -64,6 +63,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         livePicture.value = false
         motionDetection.value = false
         audioPlaying.value = false
+        downloadingImage.value = false
     }
 
     fun onSwitchNightMode(view: View, nightMode: Boolean) {
@@ -83,7 +83,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         service?.setAutoSoundEnabled(autoSoundEnabled)
     }
 
-    fun onToggleAudio() {
+    fun onToggleAudio(view: View?) {
         service?.toggleAudio()
     }
 
@@ -165,27 +165,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 .addTo(connDisposables)
 
 
-        val movementPictureLoadedDisp = conn.movement
-
+        conn.movement
                 .startWith(Movement(0.0, false, 0))
                 .map {
-                    try {
-                        val motionURL = "http://${conn.device.hostname}:8081/latest"
-                        val url = URL(motionURL)
-                        Log.d(TAG, "loading image from $motionURL in thread ${Thread.currentThread().name}")
-                        val connection = url.openConnection()
-                        val pictureTime = connection.getHeaderField("picture-time")
-                        val inputStream = connection.content as InputStream
-                        val time = Instant.ofEpochSecond(pictureTime.toLong())
-
-                        Babyphone.TimedDrawable(
-                                Drawable.createFromStream(inputStream, time.toEpochMilli().toString()),
-                                time
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error loading image $e")
-                        Babyphone.TimedDrawable.INVALID
-                    }
+                    this.downloadMotionImage(conn)
                 }
                 .filter { it != Babyphone.TimedDrawable.INVALID }
                 .subscribeOn(Schedulers.io())
@@ -195,9 +178,46 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
                     this.imagePager.addImage(it)
                 }
+                .addTo(connDisposables)
 
-        connDisposables.add(movementPictureLoadedDisp)
+    }
 
+    private fun downloadMotionImage(conn: DeviceConnection, reload: Boolean = false): Babyphone.TimedDrawable {
+        try {
+            this.downloadingImage.postValue(true)
+            val motionURL = "http://${conn.device.hostname}:8081/latest" + if (reload) "?reload" else ""
+            val url = URL(motionURL)
+            Log.d(TAG, "loading image from $motionURL in thread ${Thread.currentThread().name}")
+            val connection = url.openConnection()
+            val pictureTime = connection.getHeaderField("picture-time")
+            val inputStream = connection.content as InputStream
+            val time = Instant.ofEpochSecond(pictureTime.toLong())
+
+            return Babyphone.TimedDrawable(
+                    Drawable.createFromStream(inputStream, time.toEpochMilli().toString()),
+                    time
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading image $e")
+            return Babyphone.TimedDrawable.INVALID
+        } finally {
+            this.downloadingImage.postValue(false)
+        }
+    }
+
+    fun refreshImage(view: View?) {
+        val conn = this.service?.conn ?: return
+        GlobalScope.launch {
+            val image = withContext(Dispatchers.IO) {
+                downloadMotionImage(conn, true)
+            }
+            if (image != Babyphone.TimedDrawable.INVALID) {
+                Log.d(TAG, "got image: $image")
+                withContext(Dispatchers.Main) {
+                    this@MonitorViewModel.imagePager.addImage(image)
+                }
+            }
+        }
     }
 
     override fun onCleared() {
