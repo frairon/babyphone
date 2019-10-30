@@ -202,9 +202,7 @@ class DeviceConnection(val device: Device,
                 .map {
                     VideoFrame(
                             data = Base64.decode(it.data, Base64.DEFAULT),
-                            pts = it.pts,
                             offset = it.offset,
-                            timestamp = it.timestamp,
                             type = VideoFrame.Type.fromInt(it.type),
                             partial = it.partial
                     )

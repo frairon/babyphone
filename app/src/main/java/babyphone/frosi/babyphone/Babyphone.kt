@@ -77,14 +77,15 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     private val imagePager = ImagePager(this)
 
+
+    private val player = Player()
+
     private lateinit var model: MonitorViewModel
     private lateinit var deviceModel: DeviceViewModel
 
     private val disposables = CompositeDisposable()
 
     private var motionReloadAnimator: ValueAnimator? = null
-
-    private val player = VideoPlayer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +128,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         initVolumeGraph()
 
         this.liveVideo.holder.addCallback(this.player)
+
 
         this.images.adapter = this.model.imagePager
         disposables.add(this.model.movementUpdated
