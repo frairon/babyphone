@@ -175,7 +175,6 @@ class ConnectionService : Service() {
                     // ignore outdated alarms in case we're doing a replay
                     it.time.after(Date(System.currentTimeMillis() - 100))
                 }
-                .throttleFirst(10, TimeUnit.SECONDS)
                 .subscribe {
                     // if we're not playing already
                     if (!this.audioPlayRequested) {
