@@ -67,18 +67,11 @@ class UiLifecycleScope : CoroutineScope, LifecycleObserver {
 
 class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
-
     var service: ConnectionService? = null
-
-    private val loaderJob = Job()
-    private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
 
     private val uiScope = UiLifecycleScope()
 
-    private val imagePager = ImagePager(this)
-
-
-    private val player = Player()
+    private val player = VideoPlayer()
 
     private lateinit var model: MonitorViewModel
     private lateinit var deviceModel: DeviceViewModel

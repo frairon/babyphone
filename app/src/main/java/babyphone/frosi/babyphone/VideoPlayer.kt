@@ -17,14 +17,11 @@ import kotlin.concurrent.thread
 
 class VideoPlayer : SurfaceHolder.Callback {
 
-    private lateinit var player: Player
+    private lateinit var player: Thread
 
     private lateinit var service: ConnectionService
 
     private var playerState = BehaviorSubject.create<PlayerState>()
-
-    private lateinit var connDisposable: Disposable
-    private var frameDisposable: Disposable? = null
 
     companion object {
         const val TAG = "videoplayer"
@@ -39,10 +36,20 @@ class VideoPlayer : SurfaceHolder.Callback {
         playerState.onNext(PlayerState.STOPPED)
     }
 
-    class Player(val holder: SurfaceHolder, val input: BlockingQueue<VideoFrame>) {
+    class Player(private val holder: SurfaceHolder,
+                 private val conn: DeviceConnection,
+                 private val input: BlockingQueue<VideoFrame>) {
+
         private lateinit var mc: MediaCodec
 
-        init {
+        fun run() {
+
+            val disp = conn.frames
+                    .observeOn(Schedulers.computation())
+                    .subscribe {
+                        input.put(it)
+                    }
+
             val codecs = MediaCodecList(MediaCodecList.ALL_CODECS)
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 240)
             val codec = codecs.findDecoderForFormat(format)
@@ -50,13 +57,14 @@ class VideoPlayer : SurfaceHolder.Callback {
             this.mc = MediaCodec.createByCodecName(codec)
             mc.configure(format, holder.surface, null, 0)
             mc.start()
-        }
 
-        fun doIt(element: VideoFrame) {
             try {
-                Log.d(TAG, "doit frame ${Thread.currentThread().name}")
-                if (handleInput(element)) {
-                    renderFrame()
+                while (!Thread.currentThread().isInterrupted) {
+                    val element = input.take()
+                    if (handleInput(element)) {
+                        renderFrame()
+                    }
+
                 }
             } catch (e: MediaCodec.CodecException) {
                 Log.e(TAG, "codec exception", e)
@@ -67,10 +75,12 @@ class VideoPlayer : SurfaceHolder.Callback {
             } catch (e: Exception) {
                 Log.e(TAG, "random exception", e)
             } finally {
+                Log.d(TAG, "stopping subscription")
+                disp.dispose()
                 Log.d(TAG, "stopping the codec")
-//                this.mc.stop()
+                this.mc.stop()
                 Log.d(TAG, "releasing the codec")
-//                this.mc.release()
+                this.mc.release()
                 Log.d(TAG, "videoplayer shutdown done")
             }
         }
@@ -89,7 +99,6 @@ class VideoPlayer : SurfaceHolder.Callback {
                 Log.e(TAG, "returned input buffer is null. Stopping")
                 throw NullPointerException("input buffer was null but shouldn't have been")
             }
-            // fill in the frame
             inputBuffer.put(cu.data)
             var flags = 0
             if (cu.type == VideoFrame.Type.Config) {
@@ -98,9 +107,8 @@ class VideoPlayer : SurfaceHolder.Callback {
                 flags = MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
             }
 
-            Log.d(TAG, "queueing input buffer")
             this.mc.queueInputBuffer(inputBufferId,
-                    0,
+                    cu.offset,
                     cu.data.size,
                     0,
                     flags)
@@ -122,7 +130,6 @@ class VideoPlayer : SurfaceHolder.Callback {
                 Log.d(TAG, "deprecated output returned... ignoring")
                 return
             }
-            Log.d(TAG, "releasing output buffer")
             this.mc.releaseOutputBuffer(bufId, true)
         }
     }
@@ -131,27 +138,23 @@ class VideoPlayer : SurfaceHolder.Callback {
         Log.i(Babyphone.TAG, "surface changed format: $format, width: $width, height: $height")
 
 
+        val queue = LinkedBlockingQueue<VideoFrame>()
+        this.player = thread(start = false,
+                name = "video-rendering",
+                block = { Player(holder, this.service.conn!!, queue).run() })
+
+        this.player.start()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder): Unit {
         Log.i(Babyphone.TAG, "surface destroyed")
-        Log.d(TAG, "clearing disposables")
-        this.frameDisposable?.dispose()
         Log.d(TAG, "stopping player")
-//        this.player.interrupt()
+        this.player.interrupt()
     }
 
     override fun surfaceCreated(holder: SurfaceHolder): Unit {
         Log.i(Babyphone.TAG, "Surface Created")
 
-        val queue = LinkedBlockingQueue<VideoFrame>()
-        this.player = Player(holder, queue)
-        this.frameDisposable = this.service.conn?.frames
-//                ?.observeOn(AndroidSchedulers.mainThread())
-                ?.subscribe {
-                    Log.d(TAG, "sending frame")
-                    this.player.doIt(it)
-                }
     }
 
     fun start() {
