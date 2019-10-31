@@ -67,15 +67,11 @@ class UiLifecycleScope : CoroutineScope, LifecycleObserver {
 
 class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
-
     var service: ConnectionService? = null
-
-    private val loaderJob = Job()
-    private val loaderScope = CoroutineScope(Dispatchers.IO + loaderJob)
 
     private val uiScope = UiLifecycleScope()
 
-    private val imagePager = ImagePager(this)
+    private val player = VideoPlayer()
 
     private lateinit var model: MonitorViewModel
     private lateinit var deviceModel: DeviceViewModel
@@ -83,8 +79,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     private val disposables = CompositeDisposable()
 
     private var motionReloadAnimator: ValueAnimator? = null
-
-    private val player = VideoPlayer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +121,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         initVolumeGraph()
 
         this.liveVideo.holder.addCallback(this.player)
+
 
         this.images.adapter = this.model.imagePager
         disposables.add(this.model.movementUpdated
