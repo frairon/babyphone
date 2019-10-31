@@ -108,7 +108,7 @@ class VideoPlayer : SurfaceHolder.Callback {
             }
 
             this.mc.queueInputBuffer(inputBufferId,
-                    cu.offset,
+                    0,
                     cu.data.size,
                     0,
                     flags)
