@@ -192,6 +192,17 @@ class ConnectionService : Service() {
                     }
                 }
                 .addTo(connDisposables)
+
+        conn.missingHeartbeat
+                .subscribe {
+                    doNotify({ builder ->
+                        builder.setVibrate(arrayOf(0L, 200L, 100L, 100L).toLongArray())
+                        builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+                        builder.setContentText("Connection lost")
+                    }, isAlarm = true)
+                }
+                .addTo(connDisposables)
+
         // connecting to different device -> stop audio of previous
         this.stopAudio()
 

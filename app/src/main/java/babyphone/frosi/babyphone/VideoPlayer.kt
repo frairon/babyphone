@@ -66,6 +66,9 @@ class VideoPlayer : SurfaceHolder.Callback {
                     }
 
                 }
+            } catch (e: InterruptedException) {
+                Log.e(TAG, "player interrupted. Exiting.", e)
+                return
             } catch (e: MediaCodec.CodecException) {
                 Log.e(TAG, "codec exception", e)
                 return
@@ -245,6 +248,7 @@ class AudioPlayer(val conn: DeviceConnection) {
                         }
                     } catch (e: IllegalStateException) {
                         Log.e(TAG, "Codec seems to be in an illegal state", e)
+                        throw e
                     } catch (e: MediaCodec.CodecException) {
                         Log.e(TAG, "Codec error", e)
                     } catch (e: IllegalArgumentException) {

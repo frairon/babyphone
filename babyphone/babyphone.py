@@ -36,68 +36,6 @@ def initLogger():
     log.addHandler(consoleHandler)
 
 
-@asyncio.coroutine
-def handleVideoserverOutput(proc, bp):
-    volumeBuffer = [0, 0, 0, 0, 0, 0]
-    bufIdx = 0
-    buflen = len(volumeBuffer)
-
-    lastSent = time.time()
-    while True:
-        # proc is terminated
-        if proc.returncode is not None:
-            break
-
-        # try to read a line
-        line = yield from proc.stdout.readline()
-        parsed = {}
-        try:
-            parsed = json.loads(line.decode("utf-8"))
-        except json.JSONDecodeError as e:
-            # log.debug(
-            #     "Error parsing videoserver output as json: %s", parsed)
-            continue
-
-        # log.debug("videoserver output %s", line)
-
-        normRms = parsed.get("normrms", -1)
-        if normRms == -1:
-            continue
-
-        volumeBuffer[bufIdx] = normRms
-        bufIdx = (bufIdx + 1) % buflen
-
-        if time.time() - lastSent >= 1.0:
-            lastSent = time.time()
-            yield from bp.broadcast(
-                {"action": "volume", "volume": float(sum(volumeBuffer)) / float(buflen)}
-            )
-
-
-@asyncio.coroutine
-def runStreamServer(bp):
-    while True:
-        proc = None
-        try:
-            log.debug("starting videoserver")
-            proc = yield from asyncio.create_subprocess_exec(
-                "/home/pi/babyphone/videoserver",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            yield from handleVideoserverOutput(proc, bp)
-        except Exception as e:
-            log.error("Received while running the videoserver: %s", e)
-        finally:
-            if proc and proc.returncode is None:
-                proc.terminate()
-            if proc:
-                log.info("return code was %s", proc.returncode)
-            log.info("Video server ended. Restarting it.")
-            # sleep to avoid busy loop in case of permanent error
-            yield from asyncio.sleep(3)
-
-
 class Babyphone(object):
 
     LIGHTS_GPIO = 24
@@ -110,6 +48,7 @@ class Babyphone(object):
         self.motion = motiondetect.MotionDetect(self)
 
         self.nightMode = False
+        self._audioEncoder = None
 
         log.debug("configuring GPIO")
         gpio.setmode(gpio.BCM)
