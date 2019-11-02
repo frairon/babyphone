@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
 import android.text.TextUtils
 import android.util.Log
@@ -90,6 +91,8 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         const val TAG = "activity_devices"
     }
 
+    private val handler = Handler()
+
     private lateinit var devicesViewModel: DeviceViewModel
 
     private var service: ConnectionService? = null
@@ -157,14 +160,18 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         super.onPause()
     }
 
+    private fun startMonitorActivity() {
+        val intent = Intent(this, Babyphone::class.java)
+        this.startActivity(intent)
+    }
+
     override fun onClick(v: View?) {
         when (v?.id) {
             R.id.btn_disconnect -> {
                 service!!.disconnect()
             }
             R.id.btn_monitor -> {
-                val intent = Intent(this, Babyphone::class.java)
-                this.startActivity(intent)
+                this.startMonitorActivity()
             }
             R.id.btn_menu -> {
                 val popup = PopupMenu(this, v)
@@ -195,6 +202,11 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     fun connectToDevice(device: Device) {
 
+        val connect = {
+            val conn = devicesViewModel.connectDevice(device)
+            handler.postDelayed(Runnable { startMonitorActivity() }, 500)
+        }
+
         if (devicesViewModel.activeDevice.value != null ||
                 devicesViewModel.connectionState.value != DeviceConnection.ConnectionState.Disconnected) {
 
@@ -202,12 +214,12 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                     .setTitle("Active Connection")
                     .setMessage("Another connection is already active. This will be terminated. Continue?")
                     .setPositiveButton("Yes") { _, _ ->
-                        devicesViewModel.connectDevice(device)
+                        connect()
                     }
                     .setNegativeButton("No", null)
                     .show();
         } else {
-            devicesViewModel.connectDevice(device)
+            connect()
         }
 
     }
@@ -269,7 +281,10 @@ class EditConnection : AppCompatActivity(), View.OnClickListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Log.d(TAG, "onCreate")
+
         setContentView(R.layout.activity_edit_connection)
+
 
         if (intent.getIntExtra(EXTRA_EDIT_ID, -1) != -1) {
             this.input_name.setText(intent.getStringExtra(EXTRA_NAME))

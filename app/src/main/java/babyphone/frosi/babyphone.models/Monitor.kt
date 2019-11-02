@@ -134,6 +134,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         connDisposables.clear()
         connDisposables = CompositeDisposable()
 
+
+        if (conn == NullConnection.INSTANCE) {
+            return
+        }
+
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe { vol ->

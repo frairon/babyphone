@@ -48,21 +48,54 @@ class ConnectionLifecycle(
     }
 }
 
+
+class NullConnection {
+
+    companion object {
+        val INSTANCE = DeviceConnection(Device(name = "null", hostname = "null"),
+                socketFactory = { device, lc -> NullSocketFactory.factory(device, lc) },
+                connectOnConstruct = false)
+    }
+
+    private class NullSocketFactory : DeviceConnectionService {
+        override fun observeWebSocketEvent(): Observable<WebSocket.Event> {
+            return Observable.empty<WebSocket.Event>()
+        }
+
+        override fun sendRaw(raw: String) {
+        }
+
+        override fun sendAction(action: Action) {
+        }
+
+        override fun observeActions(): Observable<Action> {
+            return Observable.empty<Action>()
+        }
+
+        companion object {
+            fun factory(device: Device, lc: ConnectionLifecycle): DeviceConnectionService {
+                return NullSocketFactory()
+            }
+        }
+    }
+}
+
 interface SchedulerProvider {
     fun io(): Scheduler
     fun computation(): Scheduler
 }
 
-class DeviceConnection(val device: Device,
-                       socketFactory: ((Device, ConnectionLifecycle) -> DeviceConnectionService) = scarletSocketFactory,
-                       schedProvider: SchedulerProvider = reactiveXSchedulers()
-) {
+open class DeviceConnection(val device: Device,
+                            socketFactory: ((Device, ConnectionLifecycle) -> DeviceConnectionService) = scarletSocketFactory,
+                            schedProvider: SchedulerProvider = ReactiveXSchedulers(),
+                            connectOnConstruct: Boolean = true) {
 
     private val socket: DeviceConnectionService
 
     private val connLifecycle = ConnectionLifecycle()
 
-    private class reactiveXSchedulers : SchedulerProvider {
+    // scheduler interface so we can replace them unit tests
+    private class ReactiveXSchedulers : SchedulerProvider {
         override fun io(): Scheduler {
             return Schedulers.io()
         }
@@ -73,7 +106,7 @@ class DeviceConnection(val device: Device,
     }
 
     val volumes: Observable<Volume>
-    private val alarms = ReplaySubject.createWithTimeAndSize<Alarm>(300, TimeUnit.SECONDS, schedProvider.computation(), 1000)
+
     val movement: Observable<Movement>
 
     val audio: Observable<Audio>
@@ -137,7 +170,7 @@ class DeviceConnection(val device: Device,
         // The combiner function (BiFunction) checks both events and converts it into our
         // correct ConnectionState.
         // The observable is triggered on both events (websocket event and lifecycle event)
-        val connStateDisp = Observable.combineLatest(socket.observeWebSocketEvent()
+        Observable.combineLatest(socket.observeWebSocketEvent()
                 .filter { data ->
                     data is WebSocket.Event.OnConnectionClosed
                             || data is WebSocket.Event.OnConnectionClosing
@@ -158,15 +191,18 @@ class DeviceConnection(val device: Device,
                 .startWith(ConnectionState.Connecting).subscribe {
                     this.connectionState.onNext(it)
                 }
-        disposables.add(connStateDisp)
+                .addTo(disposables)
+
 
         // send a configuration-request every time we get a connection
-        disposables.add(this.socket.observeWebSocketEvent().subscribe {
-            if (it is WebSocket.Event.OnConnectionOpened<*>) {
-                Log.d(TAG, "requesting configuration")
-                this.socket.sendAction(Action(action = "configuration_request"))
-            }
-        })
+        this.socket.observeWebSocketEvent()
+                .subscribe {
+                    if (it is WebSocket.Event.OnConnectionOpened<*>) {
+                        Log.d(TAG, "requesting configuration")
+                        this.socket.sendAction(Action(action = "configuration_request"))
+                    }
+                }
+                .addTo(disposables)
 
         // Volume:
         // filter the received actions, remap it to 0-100 and let's keep
@@ -225,7 +261,9 @@ class DeviceConnection(val device: Device,
                 .map { it.audio!! }
 
         // start the connection after we have wired up the Observables
-        connLifecycle.start()
+        if (connectOnConstruct) {
+            connLifecycle.start()
+        }
     }
 
     fun disconnect() {
@@ -233,7 +271,6 @@ class DeviceConnection(val device: Device,
         connLifecycle.stop()
         Log.i(TAG, "clearing all disposables")
         disposables.clear()
-//        NotificationManagerCompat.from(this).cancel(ConnectionService.NOTI_SERVICE_ID)
     }
 
     fun startStream() {

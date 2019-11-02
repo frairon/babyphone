@@ -61,6 +61,8 @@ class ConnectionService : Service() {
 
     private var connDisposables = CompositeDisposable()
 
+    private var svcDisposables = CompositeDisposable()
+
     fun getMotionUrl(): String? {
         if (conn?.device?.hostname == "") {
             return null
@@ -93,26 +95,40 @@ class ConnectionService : Service() {
         alarmEnabled.onNext(true)
 
         autoSoundEnabled.onNext(true)
+
+        this.connections.subscribe {
+            this.updateConnection(it)
+        }.addTo(svcDisposables)
     }
 
     fun setAlarmEnabled(enabled: Boolean) {
         this.alarmEnabled.onNext(enabled)
     }
 
-    fun connect(device: Device, reconnect: Boolean = true) {
+    fun connect(device: Device, reconnect: Boolean = true): DeviceConnection {
 
         // stop old connection if any
         this.stopConnection()
         val conn = DeviceConnection(device)
         this.connections.onNext(conn)
         this.conn = conn
-
-        this.updateConnection(conn)
+        return conn
     }
 
     private fun updateConnection(conn: DeviceConnection) {
         this.connDisposables.clear()
         this.connDisposables = CompositeDisposable()
+
+        Log.d(TAG, "updating connection")
+
+        if (conn == NullConnection.INSTANCE) {
+            Log.d(TAG, "got null connection, will not wire up the observables")
+            return
+        }
+        // connecting to different device -> stop audio of previous
+        this.stopAudio()
+
+        this.startForeground()
 
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
@@ -152,19 +168,11 @@ class ConnectionService : Service() {
                 }
                 .throttleFirst(10, TimeUnit.SECONDS)
                 .subscribe {
-                    val disableAlarmIntent = Intent(this, ConnectionService::class.java)
-                            .setAction(ACTION_DISABLE_ALARM)
-                            .putExtra("extra-field", 0)
-
-                    val disableAlarmPending =
-                            PendingIntent.getBroadcast(this, 0, disableAlarmIntent, 0);
-
                     doNotify({ builder ->
                         builder.setLights(Color.RED, 500, 500)
                         builder.setVibrate(arrayOf(0L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L).toLongArray())
                         builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
                         builder.setContentText("Luise is crying")
-                        builder.addAction(R.drawable.ic_snooze_black_24dp, "snooze", disableAlarmPending);
                     }, isAlarm = true)
                 }
                 .addTo(connDisposables)
@@ -197,16 +205,44 @@ class ConnectionService : Service() {
                 .subscribe {
                     doNotify({ builder ->
                         builder.setVibrate(arrayOf(0L, 200L, 100L, 100L).toLongArray())
-                        builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
-                        builder.setContentText("Connection lost")
-                    }, isAlarm = true)
+                        builder.setContentText(resources.getString(R.string.nfTextConnectionProblems))
+                        builder.setSmallIcon(R.drawable.ic_error_outline_black_24dp)
+                        builder.color = Color.RED
+                    }, isAlarm = false)
                 }
                 .addTo(connDisposables)
 
-        // connecting to different device -> stop audio of previous
-        this.stopAudio()
+        conn.connectionState
+                .distinctUntilChanged()
+                .subscribe {
+                    var text = ""
+                    var icon = 0
+                    var color = Color.WHITE
+                    when (it) {
+                        DeviceConnection.ConnectionState.Connected -> {
+                            text = resources.getString(R.string.nfTextConnected)
+                            icon = R.drawable.ic_check_black_24dp
+                            color = Color.GREEN
+                        }
+                        DeviceConnection.ConnectionState.Disconnected -> {
+                            text = resources.getString(R.string.nfTextDisconnected)
+                            icon = R.drawable.ic_close_black_24dp
+                            color = Color.GRAY
+                        }
+                        DeviceConnection.ConnectionState.Connecting -> {
+                            text = resources.getString(R.string.nfTextConnecting)
+                            icon = R.drawable.ic_autorenew_black_24dp
+                            color = Color.BLUE
+                        }
+                    }
+                    doNotify({ builder ->
+                        builder.setContentText(text)
+                        builder.setSmallIcon(icon)
+                        builder.color = color
+                    }, isAlarm = false)
 
-        this.startForeground()
+                }
+                .addTo(connDisposables)
     }
 
     private fun stopConnection() {
@@ -219,9 +255,11 @@ class ConnectionService : Service() {
         Log.i(TAG, "service disconnect requested")
         this.stopForeground(true)
         this.stopConnection()
+        this.connections.onNext(NullConnection.INSTANCE)
 
-        Log.i(TAG, "removing notification")
+        Log.i(TAG, "removing notifications")
         NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
+        NotificationManagerCompat.from(this).cancel(NOTI_ALARM_ID)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -231,7 +269,6 @@ class ConnectionService : Service() {
 
     private fun createNotification(modify: ((NotificationCompat.Builder) -> Unit)?): Notification {
         val showBabyphone = Intent(this, Babyphone::class.java)
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val stackBuilder = TaskStackBuilder.create(this)
         stackBuilder.addNextIntentWithParentStack(showBabyphone)
         val pshowBabyphone = stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
@@ -242,11 +279,9 @@ class ConnectionService : Service() {
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle(getString(R.string.nfTitle))
                 .setSmallIcon(R.mipmap.ic_launcher_round)
-                .setAutoCancel(true)
                 .setLargeIcon(
                         Bitmap.createScaledBitmap(icon, 128, 128, false))
                 .setContentIntent(pshowBabyphone)
-
 
         if (modify != null) {
             modify(builder)
@@ -271,11 +306,11 @@ class ConnectionService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
-        stopAudio()
-        stopForeground(true)
-        this.conn?.disconnect()
-        stopSelf()
+        this.connDisposables.clear()
         this.discovery.stop()
+        stopAudio()
+        disconnect()
+        stopSelf()
         super.onDestroy()
     }
 
@@ -296,7 +331,13 @@ class ConnectionService : Service() {
     }
 
     private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)? = null, isAlarm: Boolean = false) {
-        val notification = this.createNotification(modify)
+        val notification = this.createNotification { builder ->
+            // alarms should be cancelled when we tap on them
+            if (isAlarm) {
+                builder.setAutoCancel(true)
+            }
+            modify?.invoke(builder)
+        }
         NotificationManagerCompat.from(this).notify(if (isAlarm) NOTI_ALARM_ID else NOTI_SERVICE_ID, notification)
     }
 

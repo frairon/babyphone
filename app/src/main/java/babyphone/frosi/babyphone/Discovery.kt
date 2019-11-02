@@ -10,7 +10,11 @@ import kotlin.concurrent.thread
 
 class Discovery {
 
-    val socket = DatagramSocket(null)
+    private val socket = DatagramSocket(null)
+
+    companion object {
+        const val TAG = "discovery"
+    }
 
     fun start() {
         socket.bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), 31634))
@@ -21,26 +25,26 @@ class Discovery {
     }
 
     fun stop() {
-        Log.i("discovery", "disconnecting socket")
+        Log.i(TAG, "disconnecting socket")
         socket.disconnect()
         socket.close()
     }
 
-    fun run() {
+    private fun run() {
         while (true) {
             val p = DatagramPacket(ByteArray(1024), 0, 1024)
             try {
-                socket.receive(p)
+                this.socket.receive(p)
 
 
                 val parsed = JSONObject(p.data.toString(Charsets.UTF_8))
-                Log.i("discovery", "received broadcast " + parsed.toString() + " from " + p.address.toString())
+                Log.i(TAG, "received broadcast $parsed from ${p.address}")
                 if (parsed.optString("action") == "advertise") {
                     val adv = Advertise(parsed.optString("host"))
                     EventBus.getDefault().post(adv)
                 }
             } catch (se: SocketException) {
-                Log.i("discovery", "got SocketException " + se.localizedMessage)
+                Log.i(TAG, "got SocketException ${se.localizedMessage}")
 
                 if (socket.isConnected) {
                     Thread.sleep(1000)
@@ -56,8 +60,12 @@ class Discovery {
         d.put("action", "discover")
         val data = d.toString().toByteArray(Charsets.UTF_8)
         val addr = getBroadcast()
-        Log.i("discovery", "broadcast address " + addr.toString())
-        socket.send(DatagramPacket(data, data.size, addr, 31634))
+        Log.i(TAG, "broadcast address $addr")
+        try {
+            socket.send(DatagramPacket(data, data.size, addr, 31634))
+        } catch (e: IOException) {
+            Log.e(TAG, "exception broadcasting for devices", e)
+        }
     }
 
     private fun getBroadcast(): InetAddress {
@@ -66,7 +74,7 @@ class Discovery {
         while (niEnum.hasMoreElements()) {
             val ni = niEnum.nextElement()
             if (!ni.isLoopback && ni.isUp) {
-                for (interfaceAddress in ni.getInterfaceAddresses()) {
+                for (interfaceAddress in ni.interfaceAddresses) {
                     val bc = interfaceAddress.broadcast
                     if (bc != null) {
                         return bc
@@ -78,15 +86,15 @@ class Discovery {
     }
 
     fun checkHostIsAlive(hostname: String): Boolean {
-        try {
+        return try {
             val url = URL("http://$hostname:8081/ruok")
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 200
             conn.connect()
-            val code = conn.getResponseCode()
-            return code == 200 && conn.getContent().toString() == "imok"
+            val code = conn.responseCode
+            code == 200 && conn.content.toString() == "imok"
         } catch (e: IOException) {
-            return false
+            false
         }
     }
 

@@ -50,9 +50,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         connectionState.value = DeviceConnection.ConnectionState.Disconnected
     }
 
-    fun connectDevice(device: Device) {
-        service?.connect(device, true)
+    fun connectDevice(device: Device): DeviceConnection {
+        val conn = service!!.connect(device, true)
         this.activeDevice.postValue(device)
+        return conn
     }
 
     fun connectService(service: ConnectionService) {
@@ -71,6 +72,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         // clear subscribers of old connection, if any
         disposables.clear()
         disposables = CompositeDisposable()
+
+
+        if (conn == NullConnection.INSTANCE) {
+            return
+        }
 
         // wire to the new connection
         disposables.add(conn.connectionState.subscribe { n ->

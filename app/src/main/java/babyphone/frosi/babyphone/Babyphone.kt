@@ -18,15 +18,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleObserver
-import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModelProviders
 import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
 import babyphone.frosi.babyphone.databinding.SoundOptionsBinding
 import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
-import babyphone.frosi.babyphone.models.ImagePager
 import babyphone.frosi.babyphone.models.MonitorViewModel
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
@@ -40,36 +36,13 @@ import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.conn_details.*
 import kotlinx.android.synthetic.main.monitor_audio.*
 import kotlinx.android.synthetic.main.monitor_picture.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import org.threeten.bp.Instant
 import java.text.SimpleDateFormat
-import kotlin.coroutines.CoroutineContext
 
-/**
- * Coroutine context that automatically is cancelled when UI is destroyed
- */
-class UiLifecycleScope : CoroutineScope, LifecycleObserver {
-
-    private lateinit var job: Job
-    override val coroutineContext: CoroutineContext
-        get() = job + Dispatchers.Main
-
-    @OnLifecycleEvent(Lifecycle.Event.ON_START)
-    fun onCreate() {
-        job = Job()
-    }
-
-    @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-    fun destroy() = job.cancel()
-}
 
 class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     var service: ConnectionService? = null
-
-    private val uiScope = UiLifecycleScope()
 
     private val player = VideoPlayer()
 
@@ -83,6 +56,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Log.d(TAG, "onCreate")
         model = ViewModelProviders
                 .of(this, MonitorViewModel.Factory(this.application))
                 .get(MonitorViewModel::class.java)
@@ -91,7 +65,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 .of(this, DeviceViewModel.Factory(this.application))
                 .get(DeviceViewModel::class.java)
 
-        lifecycle.addObserver(uiScope)
         // create the layout and bind the model to it
         val binding = DataBindingUtil.setContentView<ActivityMonitorBinding>(this, R.layout.activity_monitor)
         binding.model = model
@@ -285,6 +258,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         super.onResume()
 
         if (this.model.livePicture.value == true) {
+            Log.d(TAG, "onResume.. video was on, starting it again")
             this.player.start()
         }
     }
@@ -292,6 +266,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onPause() {
         super.onPause()
         if (this.model.livePicture.value == true) {
+            Log.d(TAG, "onPause, stopping video")
             this.player.stop()
         }
     }
@@ -335,7 +310,6 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onDestroy() {
         Log.i("babyphone", "onDestroy")
         this.unbindService(this)
-        lifecycle.removeObserver(uiScope)
 
         disposables.clear()
 
