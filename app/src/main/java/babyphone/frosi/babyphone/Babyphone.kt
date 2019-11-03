@@ -32,6 +32,7 @@ import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
 import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.conn_details.*
 import kotlinx.android.synthetic.main.monitor_audio.*
@@ -72,22 +73,12 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         binding.lifecycleOwner = this
 
         this.btn_live.setOnClickListener(this)
-        this.hide_menu.setOnClickListener(this)
         this.inactive_blocker.setOnClickListener { true }
         this.btn_visual_settings.setOnClickListener(this)
         this.btn_sound_settings.setOnClickListener(this)
 
-//        val coordinatorLayout = findViewById<View>(R.id.coordinator) as CoordinatorLayout
-        setSupportActionBar(findViewById<View>(R.id.toolbar) as Toolbar)
-
-        val actionbar = getSupportActionBar()
-        if (actionbar != null) {
-            actionbar.setDisplayHomeAsUpEnabled(true)
-            actionbar.title = "Babyphone"
-        }
-
-        val collapsingToolbar = findViewById<View>(R.id.collapsing_toolbar) as CollapsingToolbarLayout
-        collapsingToolbar.title = getString(R.string.app_name)
+        setSupportActionBar(this.toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         AndroidThreeTen.init(this);
 
@@ -175,6 +166,16 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         }
     }
 
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            android.R.id.home -> {
+                finishAfterTransition()
+                true
+            }
+            else -> false
+        }
+    }
+
     class TimedDrawable(val drawable: Drawable, val instant: Instant) {
         companion object {
             val INVALID = TimedDrawable(ColorDrawable(), Instant.now())
@@ -248,6 +249,15 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         this.service = svc
 
+        svc.connections
+                .subscribe {
+                    if (it == NullConnection.INSTANCE) {
+                        Log.w(TAG, "Running with null connection, will stop")
+                        this.finish()
+                    }
+                }
+                .addTo(disposables)
+
         this.model.connectService(svc)
         this.deviceModel.connectService(svc)
         this.player.connectService(svc)
@@ -265,45 +275,10 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     override fun onPause() {
         super.onPause()
+
         if (this.model.livePicture.value == true) {
             Log.d(TAG, "onPause, stopping video")
             this.player.stop()
-        }
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
-        if (menu == null) {
-            return super.onPrepareOptionsMenu(menu)
-        }
-        val mi = menu!!.findItem(R.id.action_edit) as MenuItem
-        if (x) {
-            mi.icon = ContextCompat.getDrawable(this, R.drawable.ic_headset_black_24dp)
-        }
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        menuInflater.inflate(R.menu.menu_babyphone, menu)
-        return true
-    }
-
-    var x: Boolean = false
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        return when (item.itemId) {
-            R.id.action_edit -> {
-                x = !x
-                this.invalidateOptionsMenu()
-                val abl = findViewById<View>(R.id.app_bar_layout) as AppBarLayout
-                abl.setExpanded(true)
-                return true
-
-            }
-            else -> super.onOptionsItemSelected(item)
         }
     }
 

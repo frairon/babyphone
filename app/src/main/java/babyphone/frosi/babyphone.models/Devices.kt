@@ -51,7 +51,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun connectDevice(device: Device): DeviceConnection {
-        val conn = service!!.connect(device, true)
+        val conn = service!!.connect(device)
         this.activeDevice.postValue(device)
         return conn
     }

@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.app.ActivityOptionsCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProviders
@@ -162,7 +163,8 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     private fun startMonitorActivity() {
         val intent = Intent(this, Babyphone::class.java)
-        this.startActivity(intent)
+        this.startActivity(intent,
+                ActivityOptionsCompat.makeSceneTransitionAnimation(this).toBundle())
     }
 
     override fun onClick(v: View?) {

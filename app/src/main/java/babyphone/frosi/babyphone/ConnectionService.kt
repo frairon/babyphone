@@ -105,7 +105,7 @@ class ConnectionService : Service() {
         this.alarmEnabled.onNext(enabled)
     }
 
-    fun connect(device: Device, reconnect: Boolean = true): DeviceConnection {
+    fun connect(device: Device): DeviceConnection {
 
         // stop old connection if any
         this.stopConnection()
@@ -125,10 +125,19 @@ class ConnectionService : Service() {
             Log.d(TAG, "got null connection, will not wire up the observables")
             return
         }
+
+
         // connecting to different device -> stop audio of previous
         this.stopAudio()
 
         this.startForeground()
+
+        conn.connectionState
+                .subscribe {
+                    if (it == DeviceConnection.ConnectionState.Disconnected) {
+                        this@ConnectionService.disconnect()
+                    }
+                }.addTo(connDisposables)
 
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())

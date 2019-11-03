@@ -157,12 +157,6 @@ open class DeviceConnection(val device: Device,
     init {
 
         socket = socketFactory(device, connLifecycle)
-        Log.d(TAG, "after creating socket")
-
-//        disposables.add(socket.observeWebSocketEvent().filter { it is WebSocket.Event.OnMessageReceived }.subscribe {
-//            val msg = it as WebSocket.Event.OnMessageReceived
-//            Log.i(TAG, "received " + msg.message.toString())
-//        })
 
         // our connection state is combined of two observables:
         // (1) the socket's websocket events filtered for connection events
@@ -179,6 +173,7 @@ open class DeviceConnection(val device: Device,
                 },
                 connLifecycle.running,
                 BiFunction<WebSocket.Event, Lifecycle.State, ConnectionState> { event, state ->
+                    Log.d(TAG, "event: $event, state: $state")
                     if (state == Lifecycle.State.Started) {
                         when (event) {
                             is WebSocket.Event.OnConnectionOpened<*> -> ConnectionState.Connected
@@ -203,6 +198,7 @@ open class DeviceConnection(val device: Device,
                     }
                 }
                 .addTo(disposables)
+
 
         // Volume:
         // filter the received actions, remap it to 0-100 and let's keep
@@ -244,7 +240,7 @@ open class DeviceConnection(val device: Device,
                     )
                 }
 
-        val cfgConnector = socket.observeActions()
+        config = socket.observeActions()
                 .filter { it.action == "configuration" && it.configuration != null }
                 .map { it.configuration!! }
                 .map {
@@ -253,8 +249,9 @@ open class DeviceConnection(val device: Device,
                 }
 //                .startWith(Configuration(motionDetection = true))
                 .replay(1)
-        disposables.add(cfgConnector.connect())
-        config = cfgConnector
+                .apply {
+                    this.connect().addTo(disposables)
+                }
 
         audio = socket.observeActions()
                 .filter { it.action == "audio" && it.audio?.data != "" }
