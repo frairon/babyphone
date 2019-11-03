@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.wifi.WifiManager
 import android.os.*
 import android.provider.Settings
 import android.util.Log
@@ -63,6 +64,8 @@ class ConnectionService : Service() {
 
     private var svcDisposables = CompositeDisposable()
 
+    private lateinit var wifiLock: WifiManager.WifiLock
+
     fun getMotionUrl(): String? {
         if (conn?.device?.hostname == "") {
             return null
@@ -99,6 +102,16 @@ class ConnectionService : Service() {
         this.connections.subscribe {
             this.updateConnection(it)
         }.addTo(svcDisposables)
+
+
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        val wm = getSystemService(WifiManager::class.java) as WifiManager
+        this.wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL, "babyphone")
+
     }
 
     fun setAlarmEnabled(enabled: Boolean) {
@@ -106,6 +119,11 @@ class ConnectionService : Service() {
     }
 
     fun connect(device: Device): DeviceConnection {
+
+        // let's make wifi stay on
+        if (!this.wifiLock.isHeld) {
+            this.wifiLock.acquire()
+        }
 
         // stop old connection if any
         this.stopConnection()
@@ -221,6 +239,13 @@ class ConnectionService : Service() {
                 }
                 .addTo(connDisposables)
 
+        conn.movement
+                .filter { it.moved }
+                .subscribe {
+                    vibrate(arrayOf(0L, 50L).toLongArray())
+                }
+                .addTo(connDisposables)
+
         conn.connectionState
                 .distinctUntilChanged()
                 .subscribe {
@@ -274,6 +299,10 @@ class ConnectionService : Service() {
     }
 
     fun disconnect() {
+        // turn off the wifi lock if we don't need it anymore
+        if (this.wifiLock.isHeld) {
+            this.wifiLock.release()
+        }
         Log.i(TAG, "service disconnect requested")
         this.stopForeground(true)
         this.stopConnection()
