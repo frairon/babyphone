@@ -140,7 +140,6 @@ class VideoPlayer : SurfaceHolder.Callback {
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int): Unit {
         Log.i(Babyphone.TAG, "surface changed format: $format, width: $width, height: $height")
 
-
         val queue = LinkedBlockingQueue<VideoFrame>()
         this.player = thread(start = false,
                 name = "video-rendering",

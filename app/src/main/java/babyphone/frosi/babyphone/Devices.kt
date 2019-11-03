@@ -206,11 +206,10 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
         val connect = {
             val conn = devicesViewModel.connectDevice(device)
-            handler.postDelayed(Runnable { startMonitorActivity() }, 500)
+            handler.postDelayed(Runnable { startMonitorActivity() }, 200)
         }
 
-        if (devicesViewModel.activeDevice.value != null ||
-                devicesViewModel.connectionState.value != DeviceConnection.ConnectionState.Disconnected) {
+        if (devicesViewModel.activeDevice.value != null) {
 
             MaterialAlertDialogBuilder(this)
                     .setTitle("Active Connection")

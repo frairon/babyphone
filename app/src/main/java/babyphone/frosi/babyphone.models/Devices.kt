@@ -9,6 +9,7 @@ import babyphone.frosi.babyphone.*
 import babyphone.frosi.babyphone.R
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
+import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.devices_current.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,18 +76,24 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
 
         if (conn == NullConnection.INSTANCE) {
+            this.activeDevice.postValue(null)
             return
         }
 
         // wire to the new connection
-        disposables.add(conn.connectionState.subscribe { n ->
-            this.connectionState.postValue(n)
-            this.pingDevices()
-            if (n == DeviceConnection.ConnectionState.Disconnected) {
-                this.activeDevice.postValue(null)
-            }
-        })
-        disposables.add(conn.connectionState.subscribe { n -> pingDevices() })
+        conn.connectionState
+                .subscribe { n ->
+                    this.connectionState.postValue(n)
+                    this.pingDevices()
+                    if (n == DeviceConnection.ConnectionState.Disconnected) {
+                        this.activeDevice.postValue(null)
+                    }
+                }
+                .addTo(disposables)
+        conn.connectionState
+                .subscribe { n -> pingDevices() }
+                .addTo(disposables)
+
         this.activeDevice.postValue(conn.device)
     }
 

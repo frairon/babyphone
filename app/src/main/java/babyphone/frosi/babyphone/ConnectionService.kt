@@ -243,6 +243,9 @@ class ConnectionService : Service() {
                             icon = R.drawable.ic_autorenew_black_24dp
                             color = Color.BLUE
                         }
+                        else -> {
+                            // make the compiler happy
+                        }
                     }
                     doNotify({ builder ->
                         builder.setContentText(text)
@@ -250,6 +253,16 @@ class ConnectionService : Service() {
                         builder.color = color
                     }, isAlarm = false)
 
+                }
+                .addTo(connDisposables)
+
+        conn.systemStatus
+                .subscribe {
+                    when (it) {
+                        DeviceOperation.Shutdown -> {
+                            this@ConnectionService.disconnect()
+                        }
+                    }
                 }
                 .addTo(connDisposables)
     }

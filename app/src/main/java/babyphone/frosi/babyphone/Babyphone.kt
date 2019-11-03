@@ -253,7 +253,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 .subscribe {
                     if (it == NullConnection.INSTANCE) {
                         Log.w(TAG, "Running with null connection, will stop")
-                        this.finish()
+                        this.finishAfterTransition()
                     }
                 }
                 .addTo(disposables)
