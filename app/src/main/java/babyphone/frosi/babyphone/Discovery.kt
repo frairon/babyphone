@@ -60,11 +60,11 @@ class Discovery {
         d.put("action", "discover")
         val data = d.toString().toByteArray(Charsets.UTF_8)
         val addr = getBroadcast()
-        Log.i(TAG, "broadcast address $addr")
+        Log.d(TAG, "broadcast address $addr")
         try {
             socket.send(DatagramPacket(data, data.size, addr, 31634))
         } catch (e: IOException) {
-            Log.e(TAG, "exception broadcasting for devices", e)
+            Log.i(TAG, "exception broadcasting for devices: ${e.localizedMessage}")
         }
     }
 
@@ -82,7 +82,8 @@ class Discovery {
                 }
             }
         }
-        return InetAddress.getByAddress("255.255.255.255".toByteArray())
+
+        return InetAddress.getByName("255.255.255.255")
     }
 
     fun checkHostIsAlive(hostname: String): Boolean {
