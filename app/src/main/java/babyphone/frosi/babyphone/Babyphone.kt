@@ -15,8 +15,7 @@ import android.view.*
 import android.view.animation.LinearInterpolator
 import android.widget.PopupWindow
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.core.content.ContextCompat
+import androidx.appcompat.view.menu.MenuBuilder
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProviders
 import babyphone.frosi.babyphone.databinding.ActivityMonitorBinding
@@ -25,7 +24,6 @@ import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
 import babyphone.frosi.babyphone.models.MonitorViewModel
 import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter
@@ -34,7 +32,6 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.activity_monitor.*
-import kotlinx.android.synthetic.main.conn_details.*
 import kotlinx.android.synthetic.main.monitor_audio.*
 import kotlinx.android.synthetic.main.monitor_picture.*
 import org.threeten.bp.Instant
@@ -166,13 +163,33 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         }
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        if (menu is MenuBuilder) {
+            menu.setOptionalIconsVisible(true)
+        }
+        menuInflater.inflate(R.menu.menu_monitor, menu)
+        return true;
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?): Boolean {
+        return when (item?.itemId) {
             android.R.id.home -> {
                 finishAfterTransition()
                 true
             }
-            else -> false
+            R.id.action_shutdown -> {
+                this.service?.conn?.shutdown()
+                true
+            }
+            R.id.action_restart -> {
+                this.service?.conn?.restart()
+                true
+            }
+            R.id.action_disconnect -> {
+                this.service?.disconnect()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
@@ -250,6 +267,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         this.service = svc
 
         svc.connections
+                .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     if (it == NullConnection.INSTANCE) {
                         Log.w(TAG, "Running with null connection, will stop")

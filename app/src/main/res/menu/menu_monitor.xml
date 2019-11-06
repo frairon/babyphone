@@ -1,0 +1,25 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="babyphone.frosi.babyphone.Babyphone"
+    tools:ignore="AppCompatResource">
+    <item
+        android:id="@+id/action_disconnect"
+        android:title="disconnect"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_shutdown"
+        android:title="shutdown"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_restart"
+        android:title="restart"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_settings"
+        android:enabled="false"
+        android:title="settings"
+        app:showAsAction="never" />
+</menu>

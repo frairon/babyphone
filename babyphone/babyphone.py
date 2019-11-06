@@ -41,7 +41,7 @@ class Babyphone(object):
     LIGHTS_GPIO = 24
 
     def __init__(self, loop):
-        self._data = []
+        self._videoFrameData = []
         self._loop = loop
         log.debug("starting babyphone")
         self.conns = set()
@@ -55,10 +55,19 @@ class Babyphone(object):
         gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
         self.executor = ThreadPoolExecutor(max_workers=4)
-        self.stopEvent = threading.Event()
+        self._running = threading.Event()
+        self._streamingTask = None
 
+    def start(self):
+        if self._running.is_set():
+            log.warning("Attempting to start babyphone but it seems to be running already. Ignoring.")
+            return
+
+        log.info("Starting babyphone")
+
+        self._running.set()
         log.debug("starting audio level checker")
-        self.executor.submit(self._startAudioMonitoring, self.stopEvent)
+        self.executor.submit(self._startAudioMonitoring)
         log.debug("...done")
 
         log.debug("starting motion detection")
@@ -69,7 +78,25 @@ class Babyphone(object):
         self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
         self.cam.rotation = 90
         log.debug("done")
-        self.streamingTask = None
+
+    def stop(self):
+        if not self._running.is_set():
+            log.warn("Babyphone stop called but it seems not to be running. Ignoring")
+            return
+
+        log.info("Stopping babyphone")
+        self._running.clear()
+
+        self.motion.stop()
+        self.cam.close()
+
+    def close(self):
+        log.info("closing babyphone")
+        this.stop()
+        log.debug("shutting down thread pool executor")
+        self.executor.shutdown()
+        gpio.cleanup()
+
 
     @asyncio.coroutine
     def setNightMode(self, nightMode):
@@ -92,7 +119,7 @@ class Babyphone(object):
 
         yield from self.broadcastConfig()
 
-    def _startAudioMonitoring(self, event):
+    def _startAudioMonitoring(self):
         try:
             log.debug("initializing Alsa PCM device")
             inp = alsaaudio.PCM(
@@ -110,7 +137,7 @@ class Babyphone(object):
             start = time.time()
 
             sampleState = None
-            while not event.is_set():
+            while self._running.is_set():
                 l, data = inp.read()
 
                 if l:
@@ -189,11 +216,11 @@ class Babyphone(object):
                 break
 
         if self.isAnyoneStreaming():
-            if self.streamingTask is None or self.streamingTask.done():
-                self.streamingTask = asyncio.ensure_future(self.startStream())
+            if self._streamingTask is None or self._streamingTask.done():
+                self._streamingTask = asyncio.ensure_future(self.startStream())
         else:
-            if self.streamingTask and not self.streamingTask.done():
-                self.streamingTask.cancel()
+            if self._streamingTask and not self._streamingTask.done():
+                self._streamingTask.cancel()
 
     @asyncio.coroutine
     def startStream(self):
@@ -215,27 +242,22 @@ class Babyphone(object):
 
     def write(self, data):
         try:
-            # log.info("receiving data")
-            self._data.extend(data)
-            # log.info("checking for frame complete")
+            self._videoFrameData.extend(data)
             if self.cam.frame.complete:
                 frame = self.cam.frame
-                log.info("got frame %s", str(frame.timestamp))
                 msg = dict(
                     action="vframe",
                     pts=frame.timestamp,
                     offset=frame.position,
                     timestamp=frame.timestamp ,
-                    data=base64.b64encode(bytes(self._data)).decode("ascii"),
+                    data=base64.b64encode(bytes(self._videoFrameData)).decode("ascii"),
                     type=0,
                 )
                 if frame == picamera.PiVideoFrameType.sps_header:
                     msg["type"] = 1
-                # log.info("broadcasting message")
                 asyncio.run_coroutine_threadsafe(self.broadcast(msg), loop=self._loop)
-                # self._loop.run_until_complete(t)
 
-                self._data = []
+                self._videoFrameData = []
         except Exception as e:
             log.exception(e)
 
@@ -246,18 +268,6 @@ class Babyphone(object):
 
     def isAnyoneStreaming(self):
         return any([con.streamRequested for con in self.conns])
-
-    def close(self):
-        log.info("closing babyphone")
-        self.stopEvent.set()
-
-        log.debug("shutting down thread pool executor")
-        self.executor.shutdown()
-        log.debug("...done")
-        # self.motion.stop()
-        # self.streamServer.cancel()
-        self.cam.close()
-        gpio.cleanup()
 
     @asyncio.coroutine
     def shutdown(self, conn):
@@ -278,11 +288,20 @@ class Babyphone(object):
     @asyncio.coroutine
     def connect(self, websocket, path):
         c = Connection(self, websocket)
+
+        # it's the first connection, let's start
+        if len(self.conns) == 0:
+            self.start()
+
         self.conns.add(c)
+
         yield from c.run()
 
     def removeConnection(self, conn):
         self.conns.remove(conn)
+
+        if len(self.conns) == 0:
+            self.stop()
 
     @asyncio.coroutine
     def updateState(self):

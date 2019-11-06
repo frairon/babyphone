@@ -8,18 +8,17 @@ import androidx.lifecycle.*
 import babyphone.frosi.babyphone.*
 import babyphone.frosi.babyphone.R
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.addTo
-import kotlinx.android.synthetic.main.devices_current.*
+import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import org.greenrobot.eventbus.EventBus
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
+import kotlinx.coroutines.withContext
+import java.util.*
 
 
 class DeviceViewModel(application: Application) : AndroidViewModel(application) {
-    val allDevices: LiveData<List<Device>>
+    private val allDevices: LiveData<List<Device>>
 
     val disconnectedDevices = MutableLiveData<List<Device>>()
 
@@ -31,8 +30,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository: DeviceRepository = DeviceRepository(DeviceDatabase.getDatabase(application).deviceDao())
 
-    private lateinit var connDisposable: Disposable
-    private var disposables = CompositeDisposable()
+    private val svcDisposables = CompositeDisposable()
+    private var connDisposables = CompositeDisposable()
 
     init {
         allDevices = repository.allDevices
@@ -44,7 +43,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             discover()
             updateDisconnectedDevices()
         }
-        EventBus.getDefault().register(this)
         updateDisconnectedDevices()
 
         // default is disconnected
@@ -63,16 +61,37 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
         this.discover()
 
-        connDisposable = service.connections.subscribe { conn ->
-            Log.i("deviceModel", "getting new connection $conn")
-            this.updateConnection(conn)
-        }
+        service.connections
+                .subscribe { conn ->
+                    Log.i("deviceModel", "getting new connection $conn")
+                    this.updateConnection(conn)
+                }
+                .addTo(svcDisposables)
+        service.discovery.advertisements
+                .observeOn(Schedulers.computation())
+                .subscribe {
+                    val existing = allDevices.value?.find { device ->
+                        TextUtils.equals(device.hostname.toLowerCase(Locale.getDefault()).trim(),
+                                it.host.toLowerCase(Locale.getDefault()).trim())
+                    }
+
+                    if (existing != null) {
+                        existing.alive = true
+                    } else {
+                        val hostname = it.host.toLowerCase(Locale.getDefault()).trim()
+                        val newDev = Device(hostname = hostname, name = hostname)
+                        newDev.alive = true
+                        insert(newDev)
+                    }
+                    updateDisconnectedDevices()
+                }
+                .addTo(svcDisposables)
     }
 
     private fun updateConnection(conn: DeviceConnection) {
         // clear subscribers of old connection, if any
-        disposables.clear()
-        disposables = CompositeDisposable()
+        connDisposables.clear()
+        connDisposables = CompositeDisposable()
 
 
         if (conn == NullConnection.INSTANCE) {
@@ -89,13 +108,14 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         this.activeDevice.postValue(null)
                     }
                 }
-                .addTo(disposables)
+                .addTo(connDisposables)
         conn.connectionState
                 .subscribe { n -> pingDevices() }
-                .addTo(disposables)
+                .addTo(connDisposables)
 
         this.activeDevice.postValue(conn.device)
     }
+
 
     fun discover() {
         Log.i(TAG, "starting discovery")
@@ -129,46 +149,28 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private fun pingDevices() {
         Log.i(TAG, "pinging devices")
         val service = this.service ?: return
-        allDevices.value?.forEach { dev ->
-            viewModelScope.launch(Dispatchers.IO) {
-                dev.alive = service.discovery.checkHostIsAlive(dev.hostname)
-                updateDisconnectedDevices()
+
+        viewModelScope.launch(Dispatchers.Default) {
+            allDevices.value?.forEach { dev ->
+                withContext(Dispatchers.IO) {
+                    dev.alive = service.discovery.checkHostIsAlive(dev.hostname)
+                }
             }
+            updateDisconnectedDevices()
         }
     }
-
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    fun handleBabyphoneAdvertise(adv: Advertise) {
-        val existing = allDevices.value?.find { device ->
-            TextUtils.equals(device.hostname.toLowerCase().trim(),
-                    adv.host.toLowerCase().trim())
-        }
-
-        if (existing != null) {
-            existing.alive = true
-        } else {
-            val hostname = adv.host.toLowerCase().trim()
-            val newDev = Device(hostname = hostname, name = hostname)
-            newDev.alive = true
-            insert(newDev)
-        }
-        updateDisconnectedDevices()
-    }
-
 
     override fun onCleared() {
         super.onCleared()
-        disposables.clear()
-        connDisposable.dispose()
-        EventBus.getDefault().unregister(this)
+        this.connDisposables.clear()
+        this.svcDisposables.dispose()
     }
 
     companion object {
-        val TAG = "devices_vm"
+        const val TAG = "devices_vm"
     }
 
-    class Factory(val application: Application) : ViewModelProvider.Factory {
+    class Factory(private val application: Application) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return DeviceViewModel(application) as T

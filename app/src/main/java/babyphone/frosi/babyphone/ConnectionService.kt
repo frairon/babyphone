@@ -150,13 +150,6 @@ class ConnectionService : Service() {
 
         this.startForeground()
 
-        conn.connectionState
-                .subscribe {
-                    if (it == DeviceConnection.ConnectionState.Disconnected) {
-                        this@ConnectionService.disconnect()
-                    }
-                }.addTo(connDisposables)
-
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
@@ -358,6 +351,7 @@ class ConnectionService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         this.connDisposables.clear()
+        this.svcDisposables.clear()
         this.discovery.stop()
         stopAudio()
         disconnect()

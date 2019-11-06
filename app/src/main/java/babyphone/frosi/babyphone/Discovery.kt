@@ -1,7 +1,7 @@
 package babyphone.frosi.babyphone
 
 import android.util.Log
-import org.greenrobot.eventbus.EventBus
+import io.reactivex.subjects.BehaviorSubject
 import org.json.JSONObject
 import java.io.IOException
 import java.net.*
@@ -15,6 +15,8 @@ class Discovery {
     companion object {
         const val TAG = "discovery"
     }
+
+    val advertisements = BehaviorSubject.create<Advertise>()
 
     fun start() {
         socket.bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), 31634))
@@ -41,7 +43,7 @@ class Discovery {
                 Log.i(TAG, "received broadcast $parsed from ${p.address}")
                 if (parsed.optString("action") == "advertise") {
                     val adv = Advertise(parsed.optString("host"))
-                    EventBus.getDefault().post(adv)
+                    advertisements.onNext(adv)
                 }
             } catch (se: SocketException) {
                 Log.i(TAG, "got SocketException ${se.localizedMessage}")

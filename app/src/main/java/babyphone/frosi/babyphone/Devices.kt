@@ -187,7 +187,6 @@ class Devices : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                             true
                         }
                         R.id.action_restart -> {
-                            Toast.makeText(this, "Not implemented", Toast.LENGTH_SHORT)
                             service?.conn?.restart()
                             true
                         }
