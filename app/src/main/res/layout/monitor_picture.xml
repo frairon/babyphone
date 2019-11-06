@@ -22,36 +22,49 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+
         <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/live_picture_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            android:visibility="@{model.livePicture ? View.VISIBLE: View.GONE}"
-            android:text="@string/live"
+            android:visibility="@{!model.livePicture &amp;&amp; model.motionDetection ? View.GONE : View.VISIBLE}"
             android:layout_marginTop="16dp"
             android:layout_marginEnd="16dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:text="@{utils.localDateTime(model.livePictureImageTimestamp)}"
+            android:typeface="monospace" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/banner_live"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="16dp"
             android:background="@android:color/holo_red_light"
+            android:paddingStart="4dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="2dp"
+            android:text="@string/live"
             android:textAppearance="@style/TextAppearance.Live"
-            />
+            android:visibility="@{model.livePicture ? View.VISIBLE: View.GONE}"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/live_picture_time" />
 
 
 
         <androidx.viewpager.widget.ViewPager
             android:id="@+id/images"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="240dp"
             android:layout_marginStart="8dp"
             android:layout_marginTop="8dp"
             android:layout_marginEnd="8dp"
             android:layout_marginBottom="8dp"
             android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <View
@@ -76,37 +89,37 @@
             android:background="#B4DDDDDD"
             android:src="@drawable/ic_settings_black_24dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_refresh"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_refresh"
-                android:layout_marginBottom="8dp"
-                android:enabled="@{!model.downloadingImage}"
-                android:onClick="@{model.refreshImage}"
-                android:layout_marginStart="16dp"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
-                android:theme="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                app:icon="@drawable/ic_refresh_black_24dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_refresh"
+            android:layout_marginBottom="8dp"
+            android:enabled="@{!model.downloadingImage}"
+            android:onClick="@{model.refreshImage}"
+            android:layout_marginStart="16dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:visibility="@{model.livePicture ? View.GONE: View.VISIBLE}"
+            android:theme="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            app:icon="@drawable/ic_refresh_black_24dp" />
 
-            <ProgressBar
-                android:id="@+id/prog_refresh_timeout"
-                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:max="1000"
-                android:progress="0"
-                android:visibility="@{!model.livePicture &amp;&amp; model.motionDetection ? View.VISIBLE : View.GONE}"
-                app:layout_constraintEnd_toEndOf="@id/btn_refresh"
-                app:layout_constraintTop_toTopOf="@id/btn_refresh"
-                app:layout_constraintStart_toStartOf="@id/btn_refresh"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
-                android:layout_marginTop="2dp"
-                android:elevation="10dp"
-                 />
+        <ProgressBar
+            android:id="@+id/prog_refresh_timeout"
+            style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:progress="0"
+            android:visibility="@{!model.livePicture &amp;&amp; model.motionDetection ? View.VISIBLE : View.GONE}"
+            app:layout_constraintEnd_toEndOf="@id/btn_refresh"
+            app:layout_constraintTop_toTopOf="@id/btn_refresh"
+            app:layout_constraintStart_toStartOf="@id/btn_refresh"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginTop="2dp"
+            android:elevation="10dp"
+             />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_live"
@@ -143,6 +156,9 @@
     <data>
 
         <import type="android.view.View" />
+        <variable
+            name="utils"
+            type="babyphone.frosi.babyphone.models.ViewUtils" />
 
         <variable
             name="model"

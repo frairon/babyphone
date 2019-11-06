@@ -45,7 +45,8 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:model="@{model}" />
+                    app:model="@{model}"
+                    app:utils="@{utils}"/>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
         </androidx.core.widget.NestedScrollView>
@@ -93,5 +94,10 @@
         <variable
             name="deviceModel"
             type="babyphone.frosi.babyphone.models.DeviceViewModel" />
+
+        <variable
+            name="utils"
+            type="babyphone.frosi.babyphone.models.ViewUtils" />
+
     </data>
 </layout>

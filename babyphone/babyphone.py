@@ -15,6 +15,7 @@ import numpy as np
 import picamera
 import RPi.GPIO as gpio
 import websockets.exceptions
+import datetime as dt
 from babyphone import motiondetect
 
 
@@ -60,7 +61,9 @@ class Babyphone(object):
 
     def start(self):
         if self._running.is_set():
-            log.warning("Attempting to start babyphone but it seems to be running already. Ignoring.")
+            log.warning(
+                "Attempting to start babyphone but it seems to be running already. Ignoring."
+            )
             return
 
         log.info("Starting babyphone")
@@ -96,7 +99,6 @@ class Babyphone(object):
         log.debug("shutting down thread pool executor")
         self.executor.shutdown()
         gpio.cleanup()
-
 
     @asyncio.coroutine
     def setNightMode(self, nightMode):
@@ -150,7 +152,9 @@ class Babyphone(object):
                         rms = audioop.rms(data, 4)
 
                         asyncio.run_coroutine_threadsafe(
-                            self._multicastAudio(audioop.lin2alaw(data, 4), time.time()-start),
+                            self._multicastAudio(
+                                audioop.lin2alaw(data, 4), time.time() - start
+                            ),
                             loop=self._loop,
                         )
                         if time.time() - lastSent >= 1.0:
@@ -230,14 +234,17 @@ class Babyphone(object):
                 self, format="h264", intra_period=10, profile="main", quality=23
             )
             # wait forever
-            yield from asyncio.sleep(3600)
+            yield from asyncio.sleep(36000)
+
         except (asyncio.CancelledError, CancelledError) as e:
             log.info("streaming cancelled, will stop recording")
         except Exception as e:
-            log.info("exception while streamcam ")
+            log.info("exception while streamcam")
             log.exception(e)
         finally:
             log.info("stopping the recording")
+            self.cam.annotate_background = None
+            self.cam.annotate_text = ""
             self.cam.stop_recording()
 
     def write(self, data):
@@ -249,7 +256,8 @@ class Babyphone(object):
                     action="vframe",
                     pts=frame.timestamp,
                     offset=frame.position,
-                    timestamp=frame.timestamp ,
+                    timestamp=frame.timestamp,
+                    now=int(time.time()*1000),
                     data=base64.b64encode(bytes(self._videoFrameData)).decode("ascii"),
                     type=0,
                 )

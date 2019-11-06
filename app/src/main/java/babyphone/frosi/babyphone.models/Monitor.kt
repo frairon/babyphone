@@ -41,6 +41,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     val movementImagesSize = PublishSubject.create<Int>()
 
     val livePicture = MutableLiveData<Boolean>()
+    val livePictureImageTimestamp = MutableLiveData<Long>()
     val imagePager = ImagePager(application)
     val downloadingImage = MutableLiveData<Boolean>()
 
@@ -99,14 +100,24 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         service.volumeThreshold
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
-                    this.thresholdSeries.appendData(DataPoint(Date(), it.toDouble()), true, MAX_GRAPH_ELEMENTS, true)
+                    try {
+                        this.thresholdSeries.appendData(DataPoint(Date(), it.toDouble()), true, MAX_GRAPH_ELEMENTS, true)
+                    } catch (e: IllegalArgumentException) {
+                        Log.i(TAG, "got out of order element. ignoring...", e)
+                    }
+
                 }
                 .addTo(serviceDisposables)
 
         service.alarm
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
-                    this.alarmSeries.appendData(DataPoint(it.time, it.volume.toDouble()), false, MAX_GRAPH_ELEMENTS, true)
+                    try {
+                        this.alarmSeries.appendData(DataPoint(it.time, it.volume.toDouble()), false, MAX_GRAPH_ELEMENTS, true)
+                    } catch (e: IllegalArgumentException) {
+                        Log.i(TAG, "got out of order element. ignoring...", e)
+                    }
+
                 }
                 .addTo(serviceDisposables)
 
@@ -142,8 +153,12 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe { vol ->
-                    volumeSeries
-                            .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
+                    try {
+                        volumeSeries
+                                .appendData(DataPoint(vol.time, vol.volume.toDouble()), true, MAX_GRAPH_ELEMENTS)
+                    } catch (e: IllegalArgumentException) {
+                        Log.i(TAG, "got out of order element. ignoring...", e)
+                    }
                 }
                 .addTo(connDisposables)
 
@@ -152,6 +167,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         conn.volumes
                 .debounce(100, TimeUnit.MILLISECONDS)
                 .subscribe { volumeUpdated.onNext(it) }
+                .addTo(connDisposables)
+
+        conn.frames
+                .observeOn(Schedulers.computation())
+                .throttleLatest(500, TimeUnit.MILLISECONDS)
+                .subscribe {
+                    livePictureImageTimestamp.postValue(it.now)
+                }
                 .addTo(connDisposables)
 
         conn.config

@@ -94,8 +94,8 @@ class Discovery {
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 200
             conn.connect()
-            val code = conn.responseCode
-            code == 200 && conn.content.toString() == "imok"
+            val content = conn.inputStream.bufferedReader().readText()
+            conn.responseCode == 200 && content.trim() == "imok"
         } catch (e: IOException) {
             false
         }

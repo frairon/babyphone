@@ -236,7 +236,8 @@ open class DeviceConnection(val device: Device,
                             data = Base64.decode(it.data, Base64.DEFAULT),
                             offset = it.offset,
                             type = VideoFrame.Type.fromInt(it.type),
-                            partial = it.partial
+                            partial = it.partial,
+                            now = it.now
                     )
                 }
 

@@ -23,6 +23,7 @@ import babyphone.frosi.babyphone.databinding.SoundOptionsBinding
 import babyphone.frosi.babyphone.databinding.VisualOptionsBinding
 import babyphone.frosi.babyphone.models.DeviceViewModel
 import babyphone.frosi.babyphone.models.MonitorViewModel
+import babyphone.frosi.babyphone.models.ViewUtils
 import com.google.android.material.appbar.AppBarLayout
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.jjoe64.graphview.GraphView
@@ -67,6 +68,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
         val binding = DataBindingUtil.setContentView<ActivityMonitorBinding>(this, R.layout.activity_monitor)
         binding.model = model
         binding.deviceModel = deviceModel
+        binding.utils = ViewUtils(this)
         binding.lifecycleOwner = this
 
         this.btn_live.setOnClickListener(this)

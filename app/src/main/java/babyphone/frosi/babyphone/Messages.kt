@@ -17,7 +17,8 @@ class ConnectionStateUpdated(val state: DeviceConnection.ConnectionState,
 
 class VideoFrame(val data: ByteArray,
                  val offset: Int,
-                 val timestamp: Long=0,
+                 val timestamp: Long = 0,
+                 val now: Long = 0,
                  val type: Type,
                  val partial: Boolean) {
     enum class Type(val value: Int) {
@@ -71,6 +72,7 @@ data class Action(
         @Json(name = "type") val type: Int = 0,
         @Json(name = "offset") val offset: Int = 0,
         @Json(name = "time") val time: Long = 0,
+        @Json(name = "now") val now: Long = 0,
         @Json(name = "partial") val partial: Boolean = false,
         @Json(name = "data") val data: String = "",
         @Json(name = "configuration") val configuration: Configuration? = null,
