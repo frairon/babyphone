@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	addr            = flag.String("addr", "localhost:8080", "http service address")
+	addr            = flag.String("addr", ":8080", "http service address")
 	device          = flag.String("device", "", "device to use for audio input")
 	shutdownTimeout = 10 * time.Second
 )
@@ -24,6 +24,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	s := server.New()
+	s.AddSpace("test-space", "test123")
 	done, srv := s.Start(*addr)
 
 	select {

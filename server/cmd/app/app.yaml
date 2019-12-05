@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-runtime: go112 # replace with go111 for Go 1.11
-basic_scaling:
-  max_instances: 1
-  idle_timeout: 10m
+runtime: go1.12 # replace with go111 for Go 1.11
+manual_scaling:
+  instances: 1
 
 main: github.com/frairon/babyphone/server/cmd/app
+env: flex
