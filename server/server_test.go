@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -88,7 +87,7 @@ func waitForServer() {
 	}
 }
 
-func TestFirst(t *testing.T) {
+func TestSetup(t *testing.T) {
 	log.SetFlags(0)
 
 	cfg := NewConfig()
@@ -96,19 +95,13 @@ func TestFirst(t *testing.T) {
 
 	server := New(cfg)
 	server.AddSpace("test-space", "test123")
-	done, srv := server.Start(address)
+	server.Start(address)
 	waitForServer()
 
 	defer func() {
 		// give the unit tests some time to finish before killing the server
 		time.Sleep(100 * time.Millisecond)
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		err := srv.Shutdown(ctx)
-		if err != nil {
-			log.Printf("Error shutting down server: %v", err)
-		}
-		<-done
+		server.Shutdown(3 * time.Second)
 	}()
 
 	u := url.URL{Scheme: "ws", Host: address, Path: "test-space"}
@@ -123,28 +116,85 @@ func TestFirst(t *testing.T) {
 		require.NotNil(t, err)
 	})
 
-	t.Run("setup_passwd_fail", func(t *testing.T) {
+	t.Run("setup_wrong_password", func(t *testing.T) {
 		c, _, err := dialer.Dial(u.String(), nil)
 		conn := &testConnection{
 			c: c,
 		}
 		require.Nil(t, err)
-		time.Sleep(200 * time.Millisecond)
 		defer conn.Close()
 
 		conn.writeMessage(t, &Message{
 			Action: "setup",
 			Setup: &Setup{
 				Name:     "test",
+				Password: "wrong-password",
+				Type:     clientConnection,
+			},
+		})
+		// the next message indicates that we're closed
+		msg := conn.nextMessage(t)
+		assert.True(t, msg == disconnected)
+	})
+
+	t.Run("setup_ok", func(t *testing.T) {
+		c, _, err := dialer.Dial(u.String(), nil)
+		conn := &testConnection{
+			c: c,
+		}
+		require.Nil(t, err)
+		defer conn.Close()
+
+		conn.writeMessage(t, &Message{
+			Action: "setup",
+			Setup: &Setup{
 				Password: "test123",
 				Type:     clientConnection,
 			},
 		})
-		time.Sleep(100 * time.Millisecond)
 		msg := conn.nextMessage(t)
-		log.Printf("msg %#v", msg)
-		assert.True(t, msg != nil)
 		assert.Equal(t, msg.Action, "ok")
 	})
-	// c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+}
+
+func TestClientServer(t *testing.T) {
+	log.SetFlags(0)
+
+	cfg := NewConfig()
+	cfg.LoginDelay = 0
+
+	server := New(cfg)
+	server.AddSpace("test-space", "test123")
+	server.Start(address)
+	waitForServer()
+
+	defer func() {
+		// give the unit tests some time to finish before killing the server
+		time.Sleep(100 * time.Millisecond)
+		server.Shutdown(3 * time.Second)
+	}()
+
+	u := url.URL{Scheme: "ws", Host: address, Path: "test-space"}
+
+	dialer := &websocket.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: 1 * time.Second,
+	}
+
+	t.Run("client-server", func(t *testing.T) {
+		c, _, err := dialer.Dial(u.String(), nil)
+		assert.Nil(t, err)
+		conn := &testConnection{
+			c: c,
+		}
+		conn.writeMessage(t, &Message{
+			Action: "setup",
+			Setup: &Setup{
+				Password: "test123",
+				Type:     clientConnection,
+			},
+		})
+		// eat the ok
+		assert.True(t, conn.nextMessage(t) != nil)
+	})
 }
