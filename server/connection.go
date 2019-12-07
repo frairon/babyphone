@@ -13,13 +13,26 @@ import (
 type Setup struct {
 	Type     connectionType `json:"connection_type"`
 	Password string         `json:"password"`
-	Name     string         `json:"name"`
+	// If the connection type is server, then this is the password
+	// clients need to pass in order to connect to the server
+	ServerPassword string `json:"server_password"`
+	Name           string `json:"name"`
+}
+
+type Connect struct {
+	Server   string `json:"server"`
+	Password string `json:"password"`
+}
+type ConnectionStatus struct {
+	Status string `json:"status"`
 }
 
 type Message struct {
-	Action string `json:"action"`
-	Info   string `json:"info"`
-	Setup  *Setup `json:"setup"`
+	Action           string            `json:"action"`
+	Info             string            `json:"info"`
+	Setup            *Setup            `json:"setup"`
+	Connect          *Connect          `json:"connect"`
+	ConnectionStatus *ConnectionStatus `json:"connection_status"`
 }
 
 type connectionType int
@@ -48,8 +61,12 @@ type Connection struct {
 	state    connectionState
 	name     string
 
+	// if the connection is a server, this is the password to connect to it.
+	serverPassword string
+	serverName     string
+
 	// for server connections: the connected clients
-	clients []*Connection
+	clients map[string]*Connection
 
 	// for client connection: the server
 	server *Connection
@@ -140,10 +157,49 @@ func (c *Connection) setup(setup *Setup) {
 		c.shutdown("password error")
 	}
 	c.connType = setup.Type
+
+	if c.connType == serverConnection {
+		if setup.Name == "" {
+			c.shutdown("Server connections need a name")
+		}
+		c.serverName = setup.Name
+		c.serverPassword = hashPassword(setup.ServerPassword)
+	}
+
+	// switch c.connType {
+	// case clientConnection:
+	// 	err := c.space.registerAsClient(c.clientName(), c)
+	// 	if err != nil {
+	// 		log.Printf("Error registering as client: %v", err)
+	// 		c.shutdown("registration error")
+	// 	}
+	// case serverConnection:
+	// 	err := c.space.registerAsServer(setup.Name, c)
+	// 	if err != nil {
+	// 		log.Printf("Error registering as server: %v", err)
+	// 		c.shutdown("registration error")
+	// 	}
+	// }
 	err := c.writeMessage(&Message{Action: "ok"})
 	if err != nil {
 		log.Printf("error writing: %v", err)
 	}
+}
+
+// NameIfConnType returns the name of the connection (depending on its type),
+// if the type matches the actual type.
+func (c *Connection) NameIfConnType(t connectionType) string {
+	if c.connType != t {
+		return ""
+	}
+	switch t {
+	case clientConnection:
+		return c.c.RemoteAddr().String()
+
+	case serverConnection:
+		return c.serverName
+	}
+	return ""
 }
 
 func (c *Connection) handleServerMessage(msg *Message) {
@@ -156,9 +212,59 @@ func (c *Connection) handleServerMessage(msg *Message) {
 }
 
 func (c *Connection) handleClientMessage(msg *Message) {
+	switch msg.Action {
+	case "connect":
+		connect := msg.Connect
+		if connect == nil {
+			return
+		}
+		if c.server != nil {
+			log.Printf("Connection already connected to server. Closing")
+			c.shutdown("protocol error")
+			return
+		}
+		serverConn := c.space.connectionForTypeAndName(serverConnection, connect.Server)
+		if serverConn == nil {
+			c.writeMessage(&Message{
+				Action: "connection_status",
+				ConnectionStatus: &ConnectionStatus{
+					Status: "server_not_found",
+				},
+			})
+			return
+		}
+		err := serverConn.connectClient(c, connect)
+		if err != nil {
+			log.Printf("Error connecting to server: %v", err)
+			c.shutdown("protocol error")
+			return
+		}
+		c.server = serverConn
+	}
+
 }
 
-func (c *Connection) shutdown(msg string) error {
+func (c *Connection) connectClient(client *Connection, conn *Connect) error {
+	if c.connType != serverConnection {
+		return fmt.Errorf("Connection is not a server")
+	}
+
+	time.Sleep(c.cfg.LoginDelay)
+	if c.serverPassword != hashPassword(conn.Password) {
+		return fmt.Errorf("Password did not match")
+	}
+
+	// authenticated, so let's add it to the list
+	clientName := client.NameIfConnType(clientConnection)
+	if _, exists := c.clients[clientName]; exists {
+		return fmt.Errorf("duplicate client name: %s", clientName)
+	}
+	c.clients[clientName] = client
+
+	return nil
+}
+
+func (c *Connection) shutdown(msg string) {
 	c.writeM.Lock()
 	defer c.writeM.Unlock()
 	log.Printf("Shutting down connection with message: %s", msg)
@@ -166,9 +272,8 @@ func (c *Connection) shutdown(msg string) error {
 		websocket.FormatCloseMessage(websocket.CloseGoingAway, msg),
 		time.Now().Add(time.Second))
 	if err != nil {
-		return fmt.Errorf("Error closing Connection %+v: %v", c, err)
+		log.Printf("Error closing Connection %+v: %v", c, err)
 	}
-	return nil
 }
 
 func (c *Connection) writeMessage(msg *Message) error {
