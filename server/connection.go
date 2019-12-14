@@ -23,16 +23,28 @@ type Connect struct {
 	Server   string `json:"server"`
 	Password string `json:"password"`
 }
+
+type ClientConnect struct {
+	Name    string `json:"server"`
+	Connect bool   `json:"connect"`
+}
+
 type ConnectionStatus struct {
 	Status string `json:"status"`
 }
 
 type Message struct {
 	Action           string            `json:"action"`
+	Destination      string            `json:"destination"`
 	Info             string            `json:"info"`
 	Setup            *Setup            `json:"setup"`
+	ClientConnect    *ClientConnect    `json:"client_connect"`
 	Connect          *Connect          `json:"connect"`
 	ConnectionStatus *ConnectionStatus `json:"connection_status"`
+
+	// original message. We need this since server and client might have more messages than
+	// we have here so we can pass it on without losing fields on the marshalling
+	Original []byte `json:"-"`
 }
 
 type connectionType int
@@ -91,7 +103,6 @@ func (c *Connection) run() {
 	}()
 
 	c.handleMessages()
-
 }
 
 func (c *Connection) lockForWrite() func() {
@@ -100,7 +111,30 @@ func (c *Connection) lockForWrite() func() {
 }
 
 func (c *Connection) Close() {
+	switch c.connType {
+	case serverConnection:
+		for _, client := range c.clients {
+			client.disconnectFromServer()
+		}
+	case clientConnection:
+		if c.server != nil {
+			c.server.writeMessage(&Message{
+				Action: "client_connect",
+				ClientConnect: &ClientConnect{
+					Connect: false,
+				},
+			})
+			c.server = nil
+		}
+	}
 	c.c.Close()
+}
+
+func (c *Connection) disconnectFromServer() {
+	c.server = nil
+	c.writeMessage(&Message{
+		Action: "server_disconnected",
+	})
 }
 
 func (c *Connection) handleMessages() {
@@ -125,6 +159,8 @@ func (c *Connection) handleMessages() {
 			log.Printf("Error unmarshalling message: %v: %v", string(rawMsg), err)
 			continue
 		}
+		msg.Original = rawMsg
+
 		log.Printf("received message: %#v", msg)
 		if msg.Action == "setup" {
 			log.Printf("setting up...")
@@ -139,6 +175,7 @@ func (c *Connection) handleMessages() {
 			c.shutdown("protocol error")
 		case serverConnection:
 			c.handleServerMessage(&msg)
+
 		case clientConnection:
 			c.handleClientMessage(&msg)
 		}
@@ -166,24 +203,7 @@ func (c *Connection) setup(setup *Setup) {
 		c.serverPassword = hashPassword(setup.ServerPassword)
 	}
 
-	// switch c.connType {
-	// case clientConnection:
-	// 	err := c.space.registerAsClient(c.clientName(), c)
-	// 	if err != nil {
-	// 		log.Printf("Error registering as client: %v", err)
-	// 		c.shutdown("registration error")
-	// 	}
-	// case serverConnection:
-	// 	err := c.space.registerAsServer(setup.Name, c)
-	// 	if err != nil {
-	// 		log.Printf("Error registering as server: %v", err)
-	// 		c.shutdown("registration error")
-	// 	}
-	// }
-	err := c.writeMessage(&Message{Action: "ok"})
-	if err != nil {
-		log.Printf("error writing: %v", err)
-	}
+	c.writeMessage(&Message{Action: "ok"})
 }
 
 // NameIfConnType returns the name of the connection (depending on its type),
@@ -203,12 +223,12 @@ func (c *Connection) NameIfConnType(t connectionType) string {
 }
 
 func (c *Connection) handleServerMessage(msg *Message) {
-	// for _, client := range c.clients{
-	// 	client.writeMessage(*msg))
-	// if c.peer != null {
-	// 	c.peer.writeMessage(msg)
-	// 	return
-	// }
+	for name, client := range c.clients {
+		if name == msg.Destination {
+			// pass it to the client
+			client.writeRaw(msg.Original)
+		}
+	}
 }
 
 func (c *Connection) handleClientMessage(msg *Message) {
@@ -240,6 +260,16 @@ func (c *Connection) handleClientMessage(msg *Message) {
 			return
 		}
 		c.server = serverConn
+	default:
+		// default is to assume the message is meant for the server
+		if c.server == nil {
+			log.Printf("Unhandled message, not connected to any server: %#v", msg)
+			c.writeMessage(&Message{
+				Action: "not_connected",
+			})
+			return
+		}
+		c.server.writeRaw(msg.Original)
 	}
 
 }
@@ -261,6 +291,13 @@ func (c *Connection) connectClient(client *Connection, conn *Connect) error {
 	}
 	c.clients[clientName] = client
 
+	c.writeMessage(&Message{
+		Action: "connect-client",
+		ClientConnect: &ClientConnect{
+			Name: clientName,
+		},
+	})
+
 	return nil
 }
 
@@ -276,15 +313,24 @@ func (c *Connection) shutdown(msg string) {
 	}
 }
 
-func (c *Connection) writeMessage(msg *Message) error {
+func (c *Connection) writeMessage(msg *Message) {
 	c.writeM.Lock()
 	defer c.writeM.Unlock()
-	log.Printf("Writing message %#v", msg)
 	marshalled, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("Error marshalling message %+v: %v", msg, err)
+		log.Printf("Error marshalling message %+v: %v", msg, err)
 	}
-	return c.c.WriteMessage(websocket.TextMessage, marshalled)
+	err = c.c.WriteMessage(websocket.TextMessage, marshalled)
+	if err != nil {
+		log.Printf("Could not send message %#v: %v", msg, err)
+	}
+}
+
+func (c *Connection) writeRaw(raw []byte) {
+	err := c.c.WriteMessage(websocket.TextMessage, raw)
+	if err != nil {
+		log.Printf("Could not write message %v: %v", raw, err)
+	}
 }
 
 // func broadcast(msg *Message) {
