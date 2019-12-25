@@ -210,10 +210,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     }
 
-    private fun downloadMotionImage(conn: DeviceConnection, reload: Boolean = false): Babyphone.TimedDrawable {
+    private fun downloadMotionImage(conn: DeviceConnection, refresh: Boolean = false): Babyphone.TimedDrawable {
         try {
             this.downloadingImage.postValue(true)
-            val motionURL = "http://${conn.device.hostname}:8081/latest" + if (reload) "?reload" else ""
+            val motionURL = "http://${conn.device.hostname}:8081/latest" + if (refresh) "?refresh=1" else ""
             val url = URL(motionURL)
             Log.d(TAG, "loading image from $motionURL in thread ${Thread.currentThread().name}")
             val connection = url.openConnection()
@@ -233,7 +233,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun refreshImage(view: View?) {
+    fun refreshImage(_donotuse: View?=null) {
         val conn = this.service?.conn ?: return
         GlobalScope.launch {
             val image = withContext(Dispatchers.IO) {

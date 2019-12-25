@@ -79,7 +79,7 @@ class Babyphone(object):
 
         log.debug("starting camera")
         self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
-        self.cam.rotation = 90
+        self.cam.rotation = 0
         log.debug("done")
 
     def stop(self):
@@ -105,7 +105,28 @@ class Babyphone(object):
         if nightMode == self.nightMode:
             return
 
+        # if there's a running stream, let's update the light status
+        # right away
+        if self.isAnyoneStreaming():
+            self.setLights(nightMode)
+
         self.nightMode = nightMode
+
+        if self.nightMode:
+            # add settings to camera
+            self.cam.brightness = 70
+            self.cam.iso = 800
+            self.cam.contrast = 0
+            self.cam.awb_mode = "off"
+            self.cam.awb_gains = (1, 1)
+            self.cam.exposure_mode = "night"
+        else:
+            self.cam.brightness = 50
+            self.cam.iso = 300
+            self.cam.contrast = 0
+            self.cam.awb_mode = "off"
+            self.cam.awb_gains = (1, 1)
+            self.cam.exposure_mode = "off"
 
         yield from self.broadcastConfig()
 
@@ -157,6 +178,7 @@ class Babyphone(object):
                             ),
                             loop=self._loop,
                         )
+                        # TODO you have to do the average over the time since the last sent
                         if time.time() - lastSent >= 1.0:
                             level = float(rms) / float(maxRms)
                             lastSent = time.time()
@@ -229,7 +251,9 @@ class Babyphone(object):
     @asyncio.coroutine
     def startStream(self):
         try:
+            self.setLights(self.nightMode)
             log.info("Start recording with cam")
+
             self.cam.start_recording(
                 self, format="h264", intra_period=10, profile="main", quality=23
             )
@@ -246,6 +270,7 @@ class Babyphone(object):
             self.cam.annotate_background = None
             self.cam.annotate_text = ""
             self.cam.stop_recording()
+            self.setLights(False)
 
     def write(self, data):
         try:
@@ -257,7 +282,7 @@ class Babyphone(object):
                     pts=frame.timestamp,
                     offset=frame.position,
                     timestamp=frame.timestamp,
-                    now=int(time.time()*1000),
+                    now=int(time.time() * 1000),
                     data=base64.b64encode(bytes(self._videoFrameData)).decode("ascii"),
                     type=0,
                 )
@@ -311,25 +336,16 @@ class Babyphone(object):
         if len(self.conns) == 0:
             self.stop()
 
-    @asyncio.coroutine
-    def updateState(self):
-
-        # do not touch the lights if motion detect is currently active.
-        # if self.motion.isTakingPicture():
-        #     return
-
-        # check if anyone needs lights
-        needLights = any([con.useLights for con in self.conns])
-
-        # turn the lights on if anyone needs them and anyone is streaming
-        self.setLights(needLights and self.isAnyoneStreaming())
-
     def setLights(self, on):
         log.info("turning lights %s", "on" if on else "off")
         gpio.output(self.LIGHTS_GPIO, bool(on))
 
-    def getLastPictureAsBytes(self):
+    @asyncio.coroutine
+    def getLastPictureAsBytes(self, refresh):
+        if refresh:
+            yield from self.motion.updatePicture()
         lastPicture = self.motion.lastPicture
+
         if lastPicture is None:
             return None
 
@@ -432,8 +448,6 @@ class Connection(object):
         else:
             log.error("Unhandled message from connection %s: %s", self, message)
 
-        # yield from self.bp.updateState()
-
     @asyncio.coroutine
     def disconnect(self):
         log.info("disconnecting websocket")
@@ -444,7 +458,6 @@ class Connection(object):
         finally:
             # remove from set of cnnections
             self.bp.removeConnection(self)
-            yield from self.bp.updateState()
 
     def __str__(self):
         return "Connection {ws.host}".format(ws=self._ws)
