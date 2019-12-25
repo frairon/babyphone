@@ -14,14 +14,22 @@ from skimage.measure import compare_ssim
 
 class MotionDetect(object):
     def __init__(self, babyphone):
-        self._interval = 20
         self._takingPicture = False
         self._runner = None
         self._bp = babyphone
         self.log = logging.getLogger("babyphone")
 
+        # poll every 500ms
+        self._pollInterval = 0.5
+
         self.lastPicture = None
         self.lastPictureTimestamp = 0
+        self._moved = False
+
+        self._counter = 0
+        self._maxVals = 20
+        self._movementValues = []
+
 
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
@@ -40,31 +48,16 @@ class MotionDetect(object):
     def _takePicture(self, nightMode):
 
         try:
-            cam = self._bp.cam
-            # simulate to do something with the camera
             stream = io.BytesIO()
-            # cam.color_effects = (128,128)
+
+            self._takingPicture = True
             if nightMode:
-                cam.brightness = 90
-                cam.iso = 800
-                cam.contrast = 90
-                cam.awb_mode = "off"
-                cam.awb_gains = (1, 1)
-                cam.exposure_mode = "night"
                 self._bp.setLights(True)
+                yield from asyncio.sleep(1.0)
 
-            else:
-                cam.brightness = 50
-                cam.iso = 400
-                cam.contrast = 0
-                cam.awb_mode = "off"
-                cam.awb_gains = (1, 1)
-                cam.exposure_mode = "off"
+            # let the camera adjust to the new light settings
+            self._bp.cam.capture(stream, format="jpeg")
 
-            yield from asyncio.sleep(1.0)
-            cam.capture(stream, format="jpeg")
-            if nightMode:
-                self._bp.setLights(False)
             # Construct a numpy array from the stream
             data = np.fromstring(stream.getvalue(), dtype=np.uint8)
             # "Decode" the image from the array, preserving color
@@ -72,10 +65,12 @@ class MotionDetect(object):
 
             self.log.info("Took picture")
             return image
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            self.log.info("Error taking picture: %s", e)
+        finally:
+            self._takingPicture = False
+            if nightMode:
+                self._bp.setLights(False)
+
+
 
     @asyncio.coroutine
     def _calcMovement(self, img1, img2):
@@ -87,15 +82,12 @@ class MotionDetect(object):
 
         self.log.info("Starting motion detection")
 
-        oldPicture = None
-
-        diffValues = []
-        maxVals = 20
-
-        counter = 0
         while True:
-            counter += 1
-            yield from asyncio.sleep(self._interval)
+            self._counter += 1
+            yield from asyncio.sleep(self._pollInterval)
+
+            if self.lastPictureTimestamp is not None and time.time() < self.lastPictureTimestamp+self._nextPictureDelay():
+                continue
 
             if self._bp.isAnyoneStreaming():
                 self.log.info(
@@ -104,85 +96,83 @@ class MotionDetect(object):
                 continue
 
             try:
-                self._takingPicture = True
-                picture = yield from self._takePicture(self._bp.nightMode)
-
-                # taking picture failed for some reason
-                if picture is None:
-                    continue
-
-                # analyse the image brightness
-                brightness = self._imageBrightness(picture)
-
-                # it seems to be too dark or too bright, let's try different
-                # mode next time
-                if brightness == -1:
-                    self.log.info("Image is too dark, will try in night mode next time")
-                    yield from self._bp.setNightMode(True)
-                    cv2.imwrite("/home/pi/toodark-%d.png" % time.time(), picture)
-                    continue
-                if brightness == 1:
-                    self.log.info("Image is too bright, will try in day mode next time")
-                    yield from self._bp.setNightMode(False)
-                    cv2.imwrite("/home/pi/toobright-%d.png" % time.time(), picture)
-
-                    continue
-
-                if oldPicture is not None:
-                    movement = yield from self._calcMovement(oldPicture, picture)
-
-                    if len(diffValues) < maxVals:
-                        diffValues.append(movement)
-                    else:
-                        diffValues[counter % maxVals] = movement
-
-                    avg = sum(diffValues) / float(len(diffValues))
-                    stddev = math.sqrt(
-                        sum(map(lambda x: pow(abs(x - avg), 2), diffValues))
-                        / float(len(diffValues))
-                    )
-
-                    moved = False
-                    if abs(movement - avg) > 2 * stddev:
-                        self.log.info("seems to have moved, take picture")
-                        moved = True
-                        self._interval = 4
-                    else:
-                        self._interval = 20
-
-                    yield from self._bp.broadcast(
-                        {
-                            "action": "movement",
-                            "movement": dict(
-                                value=movement,
-                                moved=moved,
-                                interval_millis=self._interval * 1000,
-                            ),
-                        }
-                    )
-
-                oldPicture = picture
-
-                # make a copy so we can modify it and save it
-                self.lastPicture = picture.copy()
-                self.lastPictureTimestamp = int(round(time.time(), 0))
-
-                # # annotate with date and time
-                # cv2.putText(self.lastPicture, datetime.now().strftime("%c"),
-                #             (3, 237),
-                #             cv2.FONT_HERSHEY_SIMPLEX,
-                #             0.3,
-                #             (255, 255, 255),
-                #             lineType=cv2.LINE_AA)
-                #
-                # # save it to disk
-                # cv2.imwrite("/home/pi/%d.png" % time.time(), self.lastPicture)
+                oldPicture, newPicture = yield from self.updatePicture()
+                if newPicture is not None:
+                    yield from self._detectMovement(oldPicture, newPicture)
 
             except asyncio.CancelledError:
                 self.log.info("Stopping motion detection as the task was cancelled")
                 return
-            finally:
-                self._takingPicture = False
+            except Exception as e:
+                self.log.info("Error taking picture: %s", e)
+
+    @asyncio.coroutine
+    def updatePicture(self):
+        picture = yield from self._takePicture(self._bp.nightMode)
+
+        # taking picture failed for some reason
+        if picture is None:
+            return None, None
+
+        # analyse the image brightness
+        brightness = self._imageBrightness(picture)
+
+        # it seems to be too dark or too bright, let's try different
+        # mode next time
+        if brightness == -1:
+            self.log.info("Image is too dark, will try in night mode next time")
+            yield from self._bp.setNightMode(True)
+        elif brightness == 1:
+            self.log.info("Image is too bright, will try in day mode next time")
+            yield from self._bp.setNightMode(False)
+
+        oldPicture = self.lastPicture
+
+        self.lastPicture = picture.copy()
+        self.lastPictureTimestamp = int(round(time.time(), 0))
+
+        return oldPicture, self.lastPicture
+
+    def _nextPictureDelay(self):
+        if self._moved:
+            return 4
+        else:
+            return 20
+
+    @asyncio.coroutine
+    def _detectMovement(self, oldPicture, newPicture):
+        movement = yield from self._calcMovement(self.lastPicture, newPicture)
+
+        if len(self._movementValues) < self._maxVals:
+            self._movementValues.append(movement)
+        else:
+            self._movementValues[self._counter % self._maxVals] = movement
+
+        avg = sum(self._movementValues) / float(len(self._movementValues))
+        stddev = math.sqrt(
+            sum(map(lambda x: pow(abs(x - avg), 2), self._movementValues))
+            / float(len(self._movementValues))
+        )
+
+        moved = False
+        if abs(movement - avg) > 2 * stddev:
+            self._moved = True
+        else:
+            self._moved = False
+
+        yield from self._bp.broadcast(
+            {
+                "action": "movement",
+                "movement": dict(
+                    value=movement,
+                    moved=moved,
+                    interval_millis=self._nextPictureDelay()*1000,
+                ),
+            }
+        )
+
+        return moved
+
 
     def _imageBrightness(self, img):
         hist = cv2.calcHist([img], [0], None, [10], [0, 256])

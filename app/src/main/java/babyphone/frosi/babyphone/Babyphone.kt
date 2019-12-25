@@ -287,6 +287,8 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     override fun onResume() {
         super.onResume()
 
+        this.model.refreshImage()
+
         if (this.model.livePicture.value == true) {
             Log.d(TAG, "onResume.. video was on, starting it again")
             this.player.start()

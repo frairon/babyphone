@@ -47,3 +47,13 @@ list-sources:
 # https://gist.github.com/ajfisher/a84889e64565d7a74888
 hotspot-setup:
 	apt-get install hostapd wpasupplicant dnsmasq
+
+
+push2babyphone-dev:
+	ssh pi@babyphone.fritz.box 'mkdir -p /tmp/babyphone-dev'
+	rsync -av . --exclude app --exclude-from .gitignore --exclude .git pi@babyphone.fritz.box:/tmp/babyphone-dev
+	ssh pi@babyphone.fritz.box 'cd /tmp/babyphone-dev && sudo python3 setup.py install && sudo systemctl restart babyphone'
+
+
+# install the i2sstuff
+# https://github.com/opencardev/snd-i2s_rpi/blob/master/README.md

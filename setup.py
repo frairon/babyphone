@@ -22,7 +22,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     name='babyphone',
 
-    version='1.0.0',
+    version='2.0.0',
 
     description='Babyphone server implementation',
 
@@ -42,6 +42,6 @@ setup(
         'RPi.GPIO',
         'aiohttp',
         'pyalsaaudio',
-        'scikit-image', 
+        'scikit-image',
         ],
 )
