@@ -5,7 +5,7 @@ After=syslog.target
 [Service]
 Type=simple
 PIDFile=/var/local/babyphone.pid
-ExecStart=/usr/bin/python3 -m babyphone.server
+ExecStart=/usr/bin/python3 -m babyphone.server --write-stats
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=Babyphone
