@@ -1,47 +1,33 @@
-# CAMHOST=pi@babyphone.fritz.box
-# for safety reasons, rename the host so we don't accidentally deploy to the babyhpone
-CAMHOST=invalid
+BP_HOST=
 
-DEVHOST=pi@devpi.fritz.box
 install-devpi:
-	ssh ${DEVHOST} 'mkdir -p /home/pi/babyphone'
-	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${DEVHOST}:/home/pi/babyphone/
-	ssh ${DEVHOST} 'cd /home/pi/babyphone && sudo python3 setup.py install'
-	ssh ${DEVHOST} 'sudo systemctl restart babyphone'
+	$(MAKE) BP_HOST=pi@devpi.fritz.box remote-install
+
+install-bp:
+	$(MAKE) BP_HOST=pi@babyphone.fritz.box remote-install
+
+remote-install:
+	ssh ${BP_HOST} 'mkdir -p /home/pi/babyphone'
+	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${BP_HOST}:/home/pi/babyphone/
+	ssh ${BP_HOST} 'cd /home/pi/babyphone && sudo python3 setup.py install'
+	ssh ${BP_HOST} 'sudo systemctl restart babyphone'
 
 systemd-install:
-	sudo cp systemd/* /etc/systemd/system/
-	sudo systemctl daemon-reload
+	ssh ${BP_HOST} 'cd /home/pi/babyphone && sudo cp systemd/* /etc/systemd/system/'
+	ssh ${BP_HOST} 'sudo systemctl daemon-reload'
+	ssh ${BP_HOST} 'sudo systemctl enable babyphone'
+	# to disable autostart, run `sudo systemctl disable babyphone`s
 
 # install all system dependencies on the pie
 prepare-system:
 	sudo apt-get install python3-opencv -y
 
-autostart:
-	sudo cp systemd/* /etc/systemd/system/
-	sudo systemctl daemon-reload
-	sudo systemctl restart babyphone
-
-	# to run on systemstart do
-	# sudo systemctl enable babyphone
-
-
 # Packages to install
 sys-setup:
 	sudo apt-get install dstat git
-	sudo apt-get install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-	gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-pulseaudio \
-	gstreamer1.0-rtsp gstreamer1.0-tools pulseaudio
 	sudo apt-get install libblas-dev liblapack-dev libatlas-base-dev gfortran
 
-	sudo apt-get install libgstreamer-plugins-bad1.0-dev libgstreamer-plugins-base1.0-dev \
-	libgstreamer1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-libav
-
 	sudo apt-get install python3-dev libatlas-base-dev python3-picamera python3-skimage libjasper-dev
-
-## To find the name of the audio device
-list-sources:
-	pacmd list-sources
 
 # taken and adopted from
 # https://gist.github.com/ajfisher/a84889e64565d7a74888
