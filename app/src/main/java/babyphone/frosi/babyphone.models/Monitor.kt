@@ -3,6 +3,7 @@ package babyphone.frosi.babyphone.models
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.PictureDrawable
 import android.util.Log
 import android.view.View
 import androidx.lifecycle.AndroidViewModel
@@ -21,6 +22,8 @@ import io.reactivex.subjects.PublishSubject
 import kotlinx.coroutines.*
 import okhttp3.internal.waitMillis
 import org.threeten.bp.Instant
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URL
 import java.util.*
@@ -220,20 +223,20 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             val pictureTime = connection.getHeaderField("picture-time")
             val inputStream = connection.content as InputStream
             val time = Instant.ofEpochSecond(pictureTime.toLong())
+            val baos = ByteArrayOutputStream()
+            inputStream.copyTo(baos)
 
-            return Babyphone.TimedDrawable(
-                    Drawable.createFromStream(inputStream, time.toEpochMilli().toString()),
-                    time
-            )
+            return Babyphone.TimedDrawable(baos.toByteArray(), time)
         } catch (e: Exception) {
             Log.e(TAG, "Error loading image $e")
             return Babyphone.TimedDrawable.INVALID
         } finally {
+
             this.downloadingImage.postValue(false)
         }
     }
 
-    fun refreshImage(_donotuse: View?=null) {
+    fun refreshImage(_donotuse: View? = null) {
         val conn = this.service?.conn ?: return
         GlobalScope.launch {
             val image = withContext(Dispatchers.IO) {

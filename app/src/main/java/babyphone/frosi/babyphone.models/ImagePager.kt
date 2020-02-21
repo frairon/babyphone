@@ -1,6 +1,7 @@
 package babyphone.frosi.babyphone.models
 
 import android.content.Context
+import android.database.DataSetObserver
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -44,6 +45,13 @@ class ImagePager(val mContext: Context, private val maxcount: Int = 10) : PagerA
 
         sizeUpdated.onNext(this.count)
         notifyDataSetChanged()
+    }
+
+    fun getLastImage():Babyphone.TimedDrawable?{
+        if(this.mPageList.isEmpty()){
+            return null
+        }
+        return this.mPageList.last()
     }
 
     override fun getCount(): Int {

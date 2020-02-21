@@ -1,19 +1,23 @@
 package babyphone.frosi.babyphone
 
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
+import android.text.TextUtils
 import android.util.Log
 import android.view.*
 import android.view.animation.LinearInterpolator
 import android.widget.PopupWindow
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.databinding.DataBindingUtil
@@ -32,10 +36,13 @@ import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
+import kotlinx.android.synthetic.main.activity_edit_connection.*
 import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.monitor_audio.*
 import kotlinx.android.synthetic.main.monitor_picture.*
+import kotlinx.android.synthetic.main.sound_options.*
 import org.threeten.bp.Instant
+import java.io.ByteArrayInputStream
 import java.text.SimpleDateFormat
 
 
@@ -149,7 +156,7 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 popup.showAsDropDown(this.btn_visual_settings)
             }
             R.id.btn_sound_settings -> {
-
+		// this.startActivity(Intent(this, SoundOptions::class.java))
                 val inflater = this.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
                 val binding = DataBindingUtil.inflate<SoundOptionsBinding>(inflater, R.layout.sound_options, null, false)
                 val popup = PopupWindow(binding.root,
@@ -191,13 +198,46 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 this.service?.disconnect()
                 true
             }
+            R.id.share -> {
+//                val last = this.model.imagePager.getLastImage()
+//                if (last == null) {
+//                    Toast.makeText(this, "No image to share", Toast.LENGTH_SHORT)
+//                } else {
+//                    val out = this.openFileOutput("${last.name}.png", Context.MODE_PRIVATE)
+//                    val inStream = ByteArrayInputStream(last.imgBytes)
+//                    inStream.copyTo(out)
+//                    inStream.close()
+//                    out.close()
+//
+//                                    val sharingIntent = Intent(android.content.Intent.ACTION_SEND)
+//                sharingIntent.setType("image/png")
+//                sharingIntent.putExtra(android.content.Intent.EXTRA_STREAM, "file:///");
+//                startActivity(Intent.createChooser(sharingIntent, "Shearing Option"));
+//
+//                }
+
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    class TimedDrawable(val drawable: Drawable, val instant: Instant) {
+    class TimedDrawable(val imgBytes: ByteArray, val instant: Instant) {
+        val name = instant.toEpochMilli().toString()
+        val drawable: Drawable
+
+        init {
+            val inStream = ByteArrayInputStream(imgBytes)
+            if (imgBytes.size > 0) {
+                drawable = Drawable.createFromStream(inStream, name)
+            } else {
+                drawable = ColorDrawable()
+            }
+            inStream.close()
+        }
+
         companion object {
-            val INVALID = TimedDrawable(ColorDrawable(), Instant.now())
+            val INVALID = TimedDrawable(ByteArray(0), Instant.now())
         }
     }
 
@@ -314,4 +354,41 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
     }
 
 }
+
+
+class SoundOptions : AppCompatActivity(), View.OnClickListener {
+
+    companion object {
+        const val TAG = "SoundOptions"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val model = ViewModelProviders
+                .of(this, MonitorViewModel.Factory(this.application))
+                .get(MonitorViewModel::class.java)
+
+        // create the layout and bind the model to it
+        val binding = DataBindingUtil.setContentView<SoundOptionsBinding>(this, R.layout.sound_options_new)
+        binding.model = model
+        binding.utils = ViewUtils(this)
+        binding.lifecycleOwner = this
+//        this.btn_close.setOnClickListener(this)
+    }
+
+
+    override fun onClick(v: View?) {
+        when (v?.id) {
+            R.id.btn_close -> {
+                this.finish()
+            }
+        }
+    }
+
+}
+
+
+
+
 
