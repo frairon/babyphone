@@ -12,9 +12,17 @@ from babyphone import babyphone, discovery
 
 loop = asyncio.get_event_loop()
 
+log = logging.getLogger("babyphone-server")
+log.setLevel(logging.DEBUG)
+consoleHandler = logging.StreamHandler(stream=sys.stdout)
+consoleHandler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+)
+log.addHandler(consoleHandler)
+
 
 def signalStop():
-    logging.info("stopping by signal")
+    log.info("stopping by signal")
     loop.stop()
 
 
@@ -44,11 +52,11 @@ def writeStats():
 def runWebserver(bp):
     from aiohttp import web
 
-    logging.info("starting application server")
+    log.info("starting application server")
 
     @asyncio.coroutine
     def latest(request):
-        logging.info("someone's refreshing the image with reload="+str(request.query.get('refresh', False)))
+        log.info(request.remote + " is refreshing the image with reload="+str(request.query.get('refresh', False)))
         refresh = request.query.get("refresh") is not None
         body = yield from bp.getLastPictureAsBytes(refresh)
         return web.Response(
@@ -65,10 +73,10 @@ def runWebserver(bp):
     app.add_routes([web.get("/ruok", imok)])
 
     runner = web.AppRunner(app)
-    logging.info("setup runner")
+    log.info("setup runner")
     yield from runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8081)
-    logging.info("starting site")
+    log.info("starting site")
     yield from site.start()
 
 
@@ -80,16 +88,17 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable writing stats to separate file for performance debugging. Requires psutil package",
     )
+    
     args = parser.parse_args()
     babyphone.initLogger()
-    logging.info("starting Server")
+    log.info("starting Server")
     try:
         bp = babyphone.Babyphone(loop)
         if args.writeStats:
             asyncio.ensure_future(writeStats())
 
         loop.add_signal_handler(signal.SIGINT, signalStop)
-        logging.info("starting websockets server")
+        log.info("starting websockets server")
         discovery.createDiscoveryServer(loop)
         loop.run_until_complete(websockets.serve(bp.connect, "0.0.0.0", 8080))
         loop.run_until_complete(runWebserver(bp))
