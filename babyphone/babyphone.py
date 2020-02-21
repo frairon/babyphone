@@ -73,13 +73,13 @@ class Babyphone(object):
         self.executor.submit(self._startAudioMonitoring)
         log.debug("...done")
 
-        log.debug("starting motion detection")
-        self.motion.start()
-        log.debug("done")
+        # log.debug("starting motion detection")
+        # self.motion.start()
+        # log.debug("done")
 
         log.debug("starting camera")
         self.cam = picamera.PiCamera(resolution=(320, 240), framerate=10)
-        self.cam.rotation = 0
+        self.cam.rotation = 90
         log.debug("done")
 
     def stop(self):
@@ -146,7 +146,9 @@ class Babyphone(object):
         try:
             log.debug("initializing Alsa PCM device")
             inp = alsaaudio.PCM(
-                alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, device="dmic_sv"
+                alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL,
+                device="dmic_sv", # babyphone
+                # cardindex=2,      # dev pi
             )
             inp.setchannels(2)
             inp.setrate(48000)
@@ -160,35 +162,44 @@ class Babyphone(object):
             start = time.time()
 
             sampleState = None
-            while self._running.is_set():
+            samples = []
+            while True:
+                if not self._running.is_set():
+                    log.info("Stopping audio monitoring by signal")
+                    break
                 l, data = inp.read()
 
-                if l:
-                    try:
-                        data = audioop.tomono(data, 4, 1, 1)
-                        (data, sampleState) = audioop.ratecv(
-                            data, 4, 1, 48000, 8000, sampleState
-                        )
-                        data = audioop.mul(data, 4, 2)
-                        rms = audioop.rms(data, 4)
+                if not l:
+                    continue
 
+                try:
+                    data = audioop.tomono(data, 4, 1, 1)
+                    (data, sampleState) = audioop.ratecv(
+                        data, 4, 1, 48000, 8000, sampleState
+                    )
+                    data = audioop.mul(data, 4, 2)
+                    rms = audioop.rms(data, 4)
+
+                    asyncio.run_coroutine_threadsafe(
+                        self._multicastAudio(
+                            audioop.lin2alaw(data, 4), time.time() - start
+                        ),
+                        loop=self._loop,
+                    )
+                    samples.append(float(rms) / float(maxRms))
+
+                    if time.time() - lastSent >= 1.0:
+                        level = np.quantile(samples, 0.75)
+                        samples = []
+                        lastSent = time.time()
                         asyncio.run_coroutine_threadsafe(
-                            self._multicastAudio(
-                                audioop.lin2alaw(data, 4), time.time() - start
-                            ),
+                            self.broadcast({"action": "volume", "volume": level}),
                             loop=self._loop,
                         )
-                        # TODO you have to do the average over the time since the last sent
-                        if time.time() - lastSent >= 1.0:
-                            level = float(rms) / float(maxRms)
-                            lastSent = time.time()
-                            asyncio.run_coroutine_threadsafe(
-                                self.broadcast({"action": "volume", "volume": level}),
-                                loop=self._loop,
-                            )
-                    except audioop.error as e:
-                        log.debug("error in audioop %s. continuing..." % str(e))
-                        continue
+                except audioop.error as e:
+                    log.debug("error in audioop %s. continuing..." % str(e))
+                    continue
+
 
         except (asyncio.CancelledError, CancelledError) as e:
             log.info("Stopping audio monitoring since the task was cancelled")
