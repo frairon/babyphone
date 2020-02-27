@@ -216,7 +216,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private fun downloadMotionImage(conn: DeviceConnection, refresh: Boolean = false): Babyphone.TimedDrawable {
         try {
             this.downloadingImage.postValue(true)
-            val motionURL = "http://${conn.device.hostname}:8081/latest" + if (refresh) "?refresh=1" else ""
+
+            val motionURL = ConnectionService.getMotionUrlForHost(conn.device.hostname, refresh)
             val url = URL(motionURL)
             Log.d(TAG, "loading image from $motionURL in thread ${Thread.currentThread().name}")
             val connection = url.openConnection()
