@@ -45,17 +45,20 @@ class MotionDetect(object):
         return self._runner is not None
 
     @asyncio.coroutine
-    def _takePicture(self, nightMode):
+    def _takePicture(self, nightMode, highRes=False):
 
+        oldRes = self._bp.cam.resolution
         try:
             stream = io.BytesIO()
 
             self._takingPicture = True
             if nightMode:
                 self._bp.setLights(True)
-                yield from asyncio.sleep(1.0)
+                yield from asyncio.sleep(0.2)
 
             # let the camera adjust to the new light settings
+            if highRes:
+                self._bp.cam.resolution=(800, 600)
             self._bp.cam.capture(stream, format="jpeg")
 
             # Construct a numpy array from the stream
@@ -67,6 +70,8 @@ class MotionDetect(object):
             return image
         finally:
             self._takingPicture = False
+            self._bp.cam.resolution = oldRes
+
             if nightMode:
                 self._bp.setLights(False)
 
@@ -107,8 +112,8 @@ class MotionDetect(object):
                 self.log.info("Error taking picture: %s", e)
 
     @asyncio.coroutine
-    def updatePicture(self):
-        picture = yield from self._takePicture(self._bp.nightMode)
+    def updatePicture(self, highRes=False):
+        picture = yield from self._takePicture(self._bp.nightMode, highRes)
 
         # taking picture failed for some reason
         if picture is None:

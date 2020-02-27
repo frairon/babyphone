@@ -354,7 +354,7 @@ class Babyphone(object):
     @asyncio.coroutine
     def getLastPictureAsBytes(self, refresh):
         if refresh:
-            yield from self.motion.updatePicture()
+            yield from self.motion.updatePicture(highRes=True)
         lastPicture = self.motion.lastPicture
 
         if lastPicture is None:
