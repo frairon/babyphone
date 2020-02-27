@@ -66,13 +66,6 @@ class ConnectionService : Service() {
 
     private lateinit var wifiLock: WifiManager.WifiLock
 
-    fun getMotionUrl(): String? {
-        if (conn?.device?.hostname == "") {
-            return null
-        }
-        return "http://${conn?.device?.hostname}:8081/latest"
-    }
-
     init {
 
         // Create the NotificationChannel, but only on API 26+ because
@@ -110,7 +103,7 @@ class ConnectionService : Service() {
         super.onCreate()
 
         val wm = getSystemService(WifiManager::class.java) as WifiManager
-        this.wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL, "babyphone")
+        this.wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "babyphone")
 
     }
 
@@ -443,6 +436,9 @@ class ConnectionService : Service() {
         val NOTI_ALARM_ID = 107
         val NOTIFICATION_CHANNEL_ID = "babyphone_notifications"
 
+        val WEBSOCKET_DEFAULTPORT = "8080"
+        val IMAGE_DEFAULTPORT = "8081"
+        private val urlReg = "(.*?):([0-9]+)$".toRegex()
 
         private val TAG = ConnectionService::class.java.simpleName
 
@@ -450,6 +446,29 @@ class ConnectionService : Service() {
             val componentName = context.startService(Intent(context, ConnectionService::class.java))
             if (componentName == null) {
                 throw RuntimeException("Could not start connection service. does not exist")
+            }
+        }
+
+        fun getMotionUrlForHost(hostname: String, refresh: Boolean): String {
+
+            var url = ""
+            val match = urlReg.find(hostname)
+            if(match != null && match.groupValues.size == 3){
+                url = "http://${match.groupValues[1]}:${match.groupValues[2].toInt()+1}/latest"
+            } else {
+                url = "http://${hostname}:${ConnectionService.IMAGE_DEFAULTPORT}/latest"
+            }
+            if (refresh) {
+                url += "?refresh=1"
+            }
+            return url
+        }
+
+        fun getWebSocketUrl(hostname: String):String{
+            if (urlReg.matches(hostname)) {
+                return "ws://${hostname}"
+            } else {
+                return "ws://${hostname}:${ConnectionService.WEBSOCKET_DEFAULTPORT}"
             }
         }
     }

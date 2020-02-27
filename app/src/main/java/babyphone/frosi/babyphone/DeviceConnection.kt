@@ -144,7 +144,7 @@ open class DeviceConnection(val device: Device,
                     .build()
 
             return Scarlet.Builder()
-                    .webSocketFactory(okHttpClient.newWebSocketFactory("ws://${device.hostname}:8080"))
+                    .webSocketFactory(okHttpClient.newWebSocketFactory(ConnectionService.getWebSocketUrl(device.hostname)))
                     .addMessageAdapterFactory(MoshiMessageAdapter.Factory(moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()))
                     .addStreamAdapterFactory(RxJava2StreamAdapterFactory())
                     .backoffStrategy(backoffStrategy)
