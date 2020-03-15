@@ -6,6 +6,8 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.PictureDrawable
 import android.util.Log
 import android.view.View
+import android.widget.CompoundButton
+import android.widget.SeekBar
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -38,10 +40,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     val volumeUpdated = PublishSubject.create<Volume>()
     val thresholdSeries = LineGraphSeries<DataPoint>()
     val alarmSeries = PointsGraphSeries<DataPoint>()
-    val useLights: Boolean = false
 
     val movementUpdated = PublishSubject.create<Movement>()
-    val movementImagesSize = PublishSubject.create<Int>()
 
     val livePicture = MutableLiveData<Boolean>()
     val livePictureImageTimestamp = MutableLiveData<Long>()
@@ -58,7 +58,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
 
     val alarmEnabled = MutableLiveData<Boolean>()
+    val alarmSnoozing = MutableLiveData<Int>()
     val autoSoundEnabled = MutableLiveData<Boolean>()
+    val noiseLevel = MutableLiveData<Int>()
 
     private val serviceDisposables = CompositeDisposable()
     private var connDisposables = CompositeDisposable()
@@ -68,23 +70,51 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         motionDetection.value = false
         audioPlaying.value = false
         downloadingImage.value = false
+        alarmEnabled.value = true
+        alarmSnoozing.value = 0
+        autoSoundEnabled.value = true
+        noiseLevel.value = 2
     }
 
     fun onSwitchNightMode(view: View, nightMode: Boolean) {
         service?.conn?.updateConfig(Configuration(nightMode = nightMode))
     }
 
-    fun onSwitchAlarmEnabled(view: View, alarmEnabled: Boolean) {
-        service?.setAlarmEnabled(alarmEnabled)
+    fun onSwitchAlarmEnabled(view: CompoundButton?, alarmEnabled: Boolean) {
+        if (alarmEnabled) {
+            service?.enableAlarm()
+        } else if (alarmSnoozing.value == 0) {
+            service?.disableAlarm()
+        }
     }
 
+    fun snoozeAlarm() {
+        service?.snoozeAlarm()
+    }
+
+    fun isSnoozing(): Boolean {
+        return with(alarmSnoozing.value) {
+            this != null && this > 0
+        }
+    }
 
     fun onSwitchMotionDetection(view: View, motionDetection: Boolean) {
         service?.conn?.updateConfig(Configuration(motionDetection = motionDetection))
     }
 
-    fun onAutoSoundEnabled(view: View, autoSoundEnabled: Boolean) {
+    fun onAutoSoundEnabled(view: CompoundButton?, autoSoundEnabled: Boolean) {
         service?.setAutoSoundEnabled(autoSoundEnabled)
+    }
+
+    fun createNoiseLevelListener(): SeekBar.OnSeekBarChangeListener {
+        return object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                this@MonitorViewModel.service?.setAlarmNoiseLevel(progress)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        }
     }
 
     fun onToggleAudio(view: View?) {
@@ -124,9 +154,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 }
                 .addTo(serviceDisposables)
 
-        service.alarmEnabled
+        service.alarmTrigger
                 .subscribe {
-                    alarmEnabled.postValue(it)
+                    alarmEnabled.postValue(it == 0)
+                    alarmSnoozing.postValue(it)
                 }
                 .addTo(serviceDisposables)
         service.autoSoundEnabled
@@ -138,6 +169,12 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         service.audioPlayStatus
                 .subscribe {
                     audioPlaying.postValue(it)
+                }
+                .addTo(serviceDisposables)
+
+        service.alarmNoiseLevel
+                .subscribe{
+                    noiseLevel.postValue(it)
                 }
                 .addTo(serviceDisposables)
     }

@@ -27,7 +27,7 @@
             android:layout_margin="8dp"
             android:background="#B4DDDDDD"
             android:padding="4dp"
-            android:src="@drawable/ic_settings_black_24dp"
+            android:src="@drawable/ic_notifications_black_24dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@id/graph_volume" />
@@ -36,23 +36,21 @@
             android:id="@+id/lbl_alarm_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="8dp"
-            android:text="Alarms"
+            android:layout_marginHorizontal="8dp"
+            android:text="@{String.format(@string/alarm_label_enabled, model.alarmEnabled ? @string/alarm_on : model.alarmSnoozing > 0 ? String.format(@string/label_alarm_snoozing, utils.secondsToDuration(model.alarmSnoozing)) : @string/alarm_off)}"
             android:textAppearance="@style/TextAppearance.AppCompat.Medium"
             app:layout_constraintStart_toEndOf="@id/btn_sound_settings"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/graph_volume" />
+            app:layout_constraintTop_toTopOf="@+id/btn_sound_settings" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/lbl_autosound_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="8dp"
-            android:text="@{model.alarmEnabled ? @string/alarm_on : @string/alarm_off}"
+            android:layout_marginHorizontal="8dp"
+            android:text="@{String.format(@string/autosound_label_enabled, model.autoSoundEnabled ? (model.alarmEnabled ? @string/alarm_on : @string/alarm_off ): @string/alarm_off)}"
             android:textAppearance="@style/TextAppearance.AppCompat.Medium"
-            app:layout_constraintStart_toEndOf="@id/lbl_alarm_status"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/graph_volume" />
-
+            app:layout_constraintStart_toEndOf="@id/btn_sound_settings"
+            app:layout_constraintBottom_toBottomOf="@+id/btn_sound_settings" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_play_audio"
@@ -72,7 +70,9 @@
     <data>
 
         <import type="android.view.View" />
-
+        <variable
+            name="utils"
+            type="babyphone.frosi.babyphone.models.ViewUtils" />
         <variable
             name="model"
             type="babyphone.frosi.babyphone.models.MonitorViewModel" />

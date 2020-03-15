@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.threeten.bp.Duration
 import org.threeten.bp.Instant
 import org.threeten.bp.LocalDateTime
 import org.threeten.bp.ZoneId
@@ -196,5 +197,12 @@ class ViewUtils(private val ctx: Context) {
     fun localDateTime(ms: Long): String {
         val localTime = LocalDateTime.ofInstant(Instant.ofEpochSecond(ms / 1000), ZoneId.systemDefault())
         return DateTimeFormatter.ISO_LOCAL_TIME.format(localTime)
+    }
+
+    fun secondsToDuration(seconds: Int): String {
+        val dur = Duration.ofSeconds(seconds.toLong())
+        val minutes = dur.toMinutes()
+        val secs = dur.minusMinutes(minutes).seconds
+        return "%02d:%02d".format(minutes, secs)
     }
 }
