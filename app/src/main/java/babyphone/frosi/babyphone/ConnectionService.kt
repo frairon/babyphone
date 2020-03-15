@@ -17,6 +17,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
@@ -56,7 +57,16 @@ class ConnectionService : Service() {
 
     val volumeThreshold = ReplaySubject.create<Int>(Babyphone.MAX_GRAPH_ELEMENTS)
     val alarm = ReplaySubject.create<Volume>(10)
-    val alarmEnabled = BehaviorSubject.create<Boolean>()
+
+    // Configures how the alarm triggering behaves
+    // 0 - enabled
+    // -1 - disabled
+    // 1-n - enabled but snoozing for n seconds
+    val alarmTrigger = BehaviorSubject.create<Int>()
+    var alarmTriggerDisp: Disposable? = null
+
+    var alarmNoiseLevel = BehaviorSubject.create<Int>()
+    var alarmState = BehaviorSubject.create<Boolean>()
 
     val autoSoundEnabled = BehaviorSubject.create<Boolean>()
 
@@ -88,7 +98,7 @@ class ConnectionService : Service() {
         volumeThreshold.onNext(50)
 
         // enable alarms per default
-        alarmEnabled.onNext(true)
+        alarmTrigger.onNext(0)
 
         autoSoundEnabled.onNext(true)
 
@@ -107,8 +117,32 @@ class ConnectionService : Service() {
 
     }
 
-    fun setAlarmEnabled(enabled: Boolean) {
-        this.alarmEnabled.onNext(enabled)
+    fun disableAlarm() {
+        alarmTriggerDisp?.dispose()
+        this.alarmTrigger.onNext(-1)
+    }
+
+    fun enableAlarm() {
+        alarmTriggerDisp?.dispose()
+        this.alarmTrigger.onNext(0)
+    }
+
+    fun snoozeAlarm() {
+        alarmTriggerDisp?.dispose()
+        alarmTriggerDisp = Observable.interval(1, 1, TimeUnit.SECONDS).forEach {
+            val triggerval = alarmTrigger.value
+            if (triggerval != null && triggerval > 0) {
+                alarmTrigger.onNext(triggerval - 1)
+            } else {
+                // stop myself
+                alarmTriggerDisp?.dispose()
+            }
+        }
+        this.alarmTrigger.onNext(600)
+    }
+
+    fun setAlarmNoiseLevel(level: Int) {
+        alarmNoiseLevel.onNext(level)
     }
 
     fun connect(device: Device): DeviceConnection {
@@ -146,7 +180,7 @@ class ConnectionService : Service() {
         conn.volumes
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
-                    if (alarmEnabled.value == true
+                    if (alarmTrigger.value == 0
                             && it.volume > this.volumeThreshold.value!!) {
                         this.alarm.onNext(it)
                     }
@@ -159,13 +193,26 @@ class ConnectionService : Service() {
                 .startWith(MutableList(120) { -1 }.asIterable())
                 .buffer(120, 1)
                 .subscribe {
-                    if (this.autoVolumeLevelEnabled && this.alarmEnabled.value == true) {
-                        var valids = it.filter { it != -1 }.toIntArray()
-                        if (valids.size > 10) {
+                    if (this.autoVolumeLevelEnabled && this.alarmTrigger.value == 0) {
+                        val valids = it.filter { it != -1 }.toIntArray()
+                        if (valids.isNotEmpty()) {
                             valids.sort()
                             val quant75 = valids.get((valids.size.toDouble() * 0.75).toInt())
                             val median = valids.get(valids.size / 2)
-                            val newThreshold = (quant75 + median + 10)
+                            var newThreshold = (quant75 + median + 10)
+
+                            alarmNoiseLevel.value?.let {
+                                val multiplier = (it - (ALARM_MAX_LEVEL / 2)).toFloat() * 0.2
+                                Log.i(TAG, "multiplier is $multiplier")
+                                newThreshold += (multiplier * newThreshold.toFloat()).toInt()
+
+                                if (newThreshold < 0) {
+                                    newThreshold = 0
+                                }
+                                if (newThreshold > 100) {
+                                    newThreshold = 100
+                                }
+                            }
                             this.volumeThreshold.onNext(newThreshold)
                         } else {
                             this.volumeThreshold.onNext(50)
@@ -198,7 +245,7 @@ class ConnectionService : Service() {
                 }
                 .subscribe {
                     // if we're not playing already
-                    if (!this.audioPlayRequested) {
+                    if (!this.audioPlayRequested && this.autoSoundEnabled.value == true) {
                         this.playAudio()
 
                         // start a timer that triggers in 10 seconds that checks:
@@ -431,6 +478,8 @@ class ConnectionService : Service() {
     }
 
     companion object {
+
+
         val ACTION_DISABLE_ALARM = "disableAlarm"
         val NOTI_SERVICE_ID = 105
         val NOTI_ALARM_ID = 107
@@ -439,6 +488,8 @@ class ConnectionService : Service() {
         val WEBSOCKET_DEFAULTPORT = "8080"
         val IMAGE_DEFAULTPORT = "8081"
         private val urlReg = "(.*?):([0-9]+)$".toRegex()
+
+        val ALARM_MAX_LEVEL = 4
 
         private val TAG = ConnectionService::class.java.simpleName
 
@@ -453,8 +504,8 @@ class ConnectionService : Service() {
 
             var url = ""
             val match = urlReg.find(hostname)
-            if(match != null && match.groupValues.size == 3){
-                url = "http://${match.groupValues[1]}:${match.groupValues[2].toInt()+1}/latest"
+            if (match != null && match.groupValues.size == 3) {
+                url = "http://${match.groupValues[1]}:${match.groupValues[2].toInt() + 1}/latest"
             } else {
                 url = "http://${hostname}:${ConnectionService.IMAGE_DEFAULTPORT}/latest"
             }
@@ -464,7 +515,7 @@ class ConnectionService : Service() {
             return url
         }
 
-        fun getWebSocketUrl(hostname: String):String{
+        fun getWebSocketUrl(hostname: String): String {
             if (urlReg.matches(hostname)) {
                 return "ws://${hostname}"
             } else {

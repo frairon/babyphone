@@ -50,4 +50,11 @@
     <string name="alarm_off">OFF</string>
     <string name="btn_refresh">refresh</string>
     <string name="share">Share</string>
+    <string name="noise_level">Noise Level</string>
+    <string name="label_alarm_enabled">Enabled</string>
+    <string name="label_alarm_disabled">Disabled</string>
+    <string name="label_alarm_snoozing">Snoozing for %s</string>
+    <string name="alarm_label_enabled">Alarm %s</string>
+    <string name="autosound_label_enabled">Auto-Sound %s</string>
+
 </resources>

@@ -1,23 +1,19 @@
 package babyphone.frosi.babyphone
 
 import android.animation.ValueAnimator
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.IBinder
-import android.text.TextUtils
 import android.util.Log
 import android.view.*
 import android.view.animation.LinearInterpolator
 import android.widget.PopupWindow
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.databinding.DataBindingUtil
@@ -36,7 +32,6 @@ import com.jjoe64.graphview.series.PointsGraphSeries
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
-import kotlinx.android.synthetic.main.activity_edit_connection.*
 import kotlinx.android.synthetic.main.activity_monitor.*
 import kotlinx.android.synthetic.main.monitor_audio.*
 import kotlinx.android.synthetic.main.monitor_picture.*
@@ -156,18 +151,18 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
                 popup.showAsDropDown(this.btn_visual_settings)
             }
             R.id.btn_sound_settings -> {
-		// this.startActivity(Intent(this, SoundOptions::class.java))
-                val inflater = this.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
-                val binding = DataBindingUtil.inflate<SoundOptionsBinding>(inflater, R.layout.sound_options, null, false)
-                val popup = PopupWindow(binding.root,
-                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                binding.model = this.model
-                binding.lifecycleOwner = this
-
-
-                popup.isFocusable = true
-                popup.isTouchable = true
-                popup.showAsDropDown(this.btn_sound_settings)
+                this.startActivity(Intent(this, SoundOptions::class.java))
+//                val inflater = this.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
+//                val binding = DataBindingUtil.inflate<SoundOptionsBinding>(inflater, R.layout.sound_options, null, false)
+//                val popup = PopupWindow(binding.root,
+//                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+//                binding.model = this.model
+//                binding.lifecycleOwner = this
+//
+//
+//                popup.isFocusable = true
+//                popup.isTouchable = true
+//                popup.showAsDropDown(this.btn_sound_settings)
             }
         }
     }
@@ -356,31 +351,75 @@ class Babyphone : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 }
 
 
-class SoundOptions : AppCompatActivity(), View.OnClickListener {
+class SoundOptions : AppCompatActivity(), ServiceConnection, View.OnClickListener {
 
     companion object {
         const val TAG = "SoundOptions"
     }
 
+    private val disposables = CompositeDisposable()
+    lateinit var model: MonitorViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val model = ViewModelProviders
+        model = ViewModelProviders
                 .of(this, MonitorViewModel.Factory(this.application))
                 .get(MonitorViewModel::class.java)
 
         // create the layout and bind the model to it
-        val binding = DataBindingUtil.setContentView<SoundOptionsBinding>(this, R.layout.sound_options_new)
+        val binding = DataBindingUtil.setContentView<SoundOptionsBinding>(this, R.layout.sound_options)
         binding.model = model
         binding.utils = ViewUtils(this)
         binding.lifecycleOwner = this
-//        this.btn_close.setOnClickListener(this)
+
+        this.btn_close.setOnClickListener(this)
+        this.btn_alarm_snooze.setOnClickListener(this)
+
+        this.bindService(Intent(this, ConnectionService::class.java), this, 0)
     }
 
+    override fun onDestroy() {
+        this.unbindService(this)
+
+        disposables.clear()
+
+        super.onDestroy()
+    }
+
+    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+
+        if (service == null) {
+            return
+        }
+        Log.i(TAG, "service connected")
+        val svc = (service as ConnectionService.ConnectionServiceBinder).service
+
+        svc.connections
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    if (it == NullConnection.INSTANCE) {
+                        Log.w(TAG, "Running with null connection, will stop")
+                        this.finish()
+                    }
+                }
+                .addTo(disposables)
+
+        this.model.connectService(svc)
+
+    }
+
+    override fun onServiceDisconnected(name: ComponentName?) {
+        Log.i(TAG, "service disconnected")
+    }
 
     override fun onClick(v: View?) {
         when (v?.id) {
             R.id.btn_close -> {
+                this.finish()
+            }
+            R.id.btn_alarm_snooze -> {
+                this.model.snoozeAlarm()
                 this.finish()
             }
         }

@@ -1,36 +1,136 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layout xmlns:android="http://schemas.android.com/apk/res/android">
-
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <androidx.appcompat.widget.LinearLayoutCompat
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#B4DDDDDD"
-        android:orientation="vertical"
-        android:padding="8dp">
+        android:layout_marginTop="128dp"
+        android:gravity="center_horizontal">
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/swt_alarm"
-            android:layout_width="match_parent"
+        <androidx.appcompat.widget.LinearLayoutCompat
+            style="@style/BabyphoneMain.Dialog.Frame"
+            android:layout_width="270dp"
             android:layout_height="wrap_content"
-            android:checked="@{model.alarmEnabled}"
-            android:onCheckedChanged="@{model.onSwitchAlarmEnabled}"
-            android:text="Alarms" />
+            android:orientation="vertical"
+            android:padding="16dp"
+            tools:context=".SoundOptions">
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/swt_auto_sound"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="@{model.autoSoundEnabled}"
-            android:onCheckedChanged="@{model.onAutoSoundEnabled}"
-            android:text="Auto sound forwarding" />
+            <TextView
+                android:id="@+id/label_alarm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Alarm &amp; Sound Settings"
+                android:textAppearance="@style/TextAppearance.AppCompat.Title" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:layout_width="match_parent"
+                android:layout_marginTop="-8dp"
+                android:layout_height="wrap_content"
+                android:checked="@{model.alarmEnabled}"
+                android:onCheckedChanged="@{model::onSwitchAlarmEnabled}"
+                android:text="@{model.alarmEnabled ? @string/label_alarm_enabled : @string/label_alarm_disabled}" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-12dp"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:gravity="right"
+                android:layout_marginHorizontal="4dp"
+                android:text="@{model.alarmSnoozing > 0 ? String.format(@string/label_alarm_snoozing, utils.secondsToDuration(model.alarmSnoozing)) : null}"
+            />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_alarm_snooze"
+                style="?attr/materialButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:enabled="@{model.alarmEnabled || model.alarmSnoozing > 0}"
+                android:text="Snooze 10 minutes" />
 
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Autoplay Sound"
+                android:textAppearance="@style/TextAppearance.AppCompat.Medium" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-8dp"
+                android:enabled="@{model.alarmEnabled || model.alarmSnoozing > 0}"
+                android:checked="@{model.autoSoundEnabled}"
+                android:onCheckedChanged="@{model::onAutoSoundEnabled}"
+                android:text="@{model.autoSoundEnabled ? @string/label_alarm_enabled : @string/label_alarm_disabled}" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/noise_level"
+                android:textAppearance="@style/TextAppearance.AppCompat.Medium" />
+
+            <SeekBar
+                android:id="@+id/seekBar"
+                style="@style/Widget.AppCompat.SeekBar.Discrete"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:onSeekBarChangeListener="@{model.createNoiseLevelListener()}"
+                android:enabled="@{model.alarmEnabled || model.isSnoozing()}"
+                android:max="4"
+                android:progress="@{model.noiseLevel}" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="left"
+                    android:text="quiet"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Button" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="normal"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Button" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="right"
+                    android:text="loud"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Button" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_close"
+                style="?attr/materialButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="16dp"
+                android:text="close" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <data>
 
         <import type="android.view.View" />
+        <import type="babyphone.frosi.babyphone.ConnectionService" />
 
         <variable
             name="utils"
