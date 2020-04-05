@@ -3,7 +3,6 @@ package babyphone.frosi.babyphone
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -13,21 +12,19 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
+import io.reactivex.functions.BiPredicate
+import io.reactivex.functions.Function
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import io.reactivex.subjects.ReplaySubject
-import org.threeten.bp.Duration
-import org.threeten.bp.Instant
 import java.io.Serializable
 import java.util.*
 import java.util.concurrent.TimeUnit
-import kotlin.math.roundToInt
 
 
 class Point(val time: Date, val volume: Int) : Serializable {
@@ -58,6 +55,7 @@ class ConnectionService : Service() {
     val volumeThreshold = ReplaySubject.create<Int>(Babyphone.MAX_GRAPH_ELEMENTS)
     val alarm = ReplaySubject.create<Volume>(10)
 
+
     // Configures how the alarm triggering behaves
     // 0 - enabled
     // -1 - disabled
@@ -66,7 +64,8 @@ class ConnectionService : Service() {
     var alarmTriggerDisp: Disposable? = null
 
     var alarmNoiseLevel = BehaviorSubject.create<Int>()
-    var alarmState = BehaviorSubject.create<Boolean>()
+
+    var systemState = BehaviorSubject.create<SystemState>()
 
     val autoSoundEnabled = BehaviorSubject.create<Boolean>()
 
@@ -233,7 +232,7 @@ class ConnectionService : Service() {
                         builder.setVibrate(arrayOf(0L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L, 300L).toLongArray())
                         builder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
                         builder.setContentText("Luise is crying")
-                    }, isAlarm = true)
+                    })
                 }
                 .addTo(connDisposables)
 
@@ -263,13 +262,21 @@ class ConnectionService : Service() {
 
         conn.missingHeartbeat
                 .subscribe {
-                    doNotify({ builder ->
-                        builder.setVibrate(arrayOf(0L, 200L, 100L, 100L).toLongArray())
-                        builder.setContentText(resources.getString(R.string.nfTextConnectionProblems))
-                        builder.setSmallIcon(R.drawable.ic_error_outline_black_24dp)
-                        builder.color = Color.RED
-                    }, isAlarm = false)
+                    // only notify if the heartbeat had been missing at all.
+                    if (it > 0) {
+                        doNotify { builder ->
+                            builder.setVibrate(arrayOf(0L, 200L, 100L, 100L).toLongArray())
+                            builder.setContentText(resources.getString(R.string.nfTextConnectionProblems))
+                            builder.setSmallIcon(R.drawable.ic_error_outline_black_24dp)
+                            builder.color = Color.RED
+                        }
+                    }
                 }
+                .addTo(connDisposables)
+
+        Observable.combineLatest(Function { input: Array<Any> -> 0L }, 1, conn.missingHeartbeat, conn.connectionState, this.volumeThreshold, conn.volumes)
+                .distinctUntilChanged(BiPredicate { first, second -> false })
+                .subscribe { }
                 .addTo(connDisposables)
 
         conn.movement
@@ -309,7 +316,7 @@ class ConnectionService : Service() {
                         builder.setContentText(text)
                         builder.setSmallIcon(icon)
                         builder.color = color
-                    }, isAlarm = false)
+                    })
 
                 }
                 .addTo(connDisposables)
@@ -343,7 +350,6 @@ class ConnectionService : Service() {
 
         Log.i(TAG, "removing notifications")
         NotificationManagerCompat.from(this).cancel(NOTI_SERVICE_ID)
-        NotificationManagerCompat.from(this).cancel(NOTI_ALARM_ID)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -415,15 +421,11 @@ class ConnectionService : Service() {
         }
     }
 
-    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)? = null, isAlarm: Boolean = false) {
+    private fun doNotify(modify: ((NotificationCompat.Builder) -> Unit)? = null) {
         val notification = this.createNotification { builder ->
-            // alarms should be cancelled when we tap on them
-            if (isAlarm) {
-                builder.setAutoCancel(true)
-            }
             modify?.invoke(builder)
         }
-        NotificationManagerCompat.from(this).notify(if (isAlarm) NOTI_ALARM_ID else NOTI_SERVICE_ID, notification)
+        NotificationManagerCompat.from(this).notify(NOTI_SERVICE_ID, notification)
     }
 
     fun playAudio(setRequested: Boolean = false) {
@@ -482,7 +484,6 @@ class ConnectionService : Service() {
 
         val ACTION_DISABLE_ALARM = "disableAlarm"
         val NOTI_SERVICE_ID = 105
-        val NOTI_ALARM_ID = 107
         val NOTIFICATION_CHANNEL_ID = "babyphone_notifications"
 
         val WEBSOCKET_DEFAULTPORT = "8080"

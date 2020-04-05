@@ -20,8 +20,8 @@ import io.reactivex.functions.BiFunction
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.mergeAllSingles
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.Timed
 import io.reactivex.subjects.BehaviorSubject
-import io.reactivex.subjects.ReplaySubject
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 import java.util.*
@@ -217,7 +217,38 @@ open class DeviceConnection(val device: Device,
                 .window(20, TimeUnit.SECONDS, schedProvider.computation())
                 .map { w -> w.count() }
                 .mergeAllSingles()
-                .filter { c -> c == 0L }
+                // emit true if the heartbeat is missing
+                .map { c -> c == 0L }
+                // add a timestamp
+                .timestamp()
+                .scan(0L, { start: Long, y: Timed<Boolean> ->
+                    // if the heartbeat is missing
+                    if (y.value()) {
+                        // if it was missing before (i.e. start is not 0) --> emit start
+                        if(start == 0L){
+                            // emit the now - the timewindow -> i.e. when it started to be missing
+                            y.time()-20000L
+                        }else{
+                            // it was misisng before --> emit the same time
+                            start
+                        }
+                        // the heartbeat is not missing -> emit zero
+                    } else {
+                        0L
+                    }
+                })
+                // pair up with current timestamp
+                .timestamp()
+                // if there's is no "start-time" of missing heartbeats, return 0L
+                // Otherwise subscract with the number of milliseconds the heartbeat had been
+                // missing so far.
+                .map {
+                    if (it.value() == 0L) {
+                        0L
+                    } else {
+                        it.time() - it.value()
+                    }
+                }
 
         systemStatus = socket.observeActions()
                 .filter { a -> a.action == "systemstatus" }
