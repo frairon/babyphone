@@ -9,6 +9,7 @@ from datetime import datetime
 
 import websockets
 from babyphone import babyphone, discovery
+from babyphone import telegram
 
 loop = asyncio.get_event_loop()
 
@@ -30,7 +31,8 @@ def signalStop():
 def writeStats():
     import psutil
 
-    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    logFormatter = logging.Formatter(
+        "%(asctime)s [%(levelname)-5.5s]  %(message)s")
     fileHandler = logging.FileHandler(
         datetime.now().strftime("babyphone-%Y-%m-%d-stats.log")
     )
@@ -44,7 +46,8 @@ def writeStats():
         cpu = psutil.cpu_percent(interval=None)
 
         memory = psutil.virtual_memory()
-        statLogger.info("CPU: %.2f Memory left: %sMb", cpu, memory.available / MB)
+        statLogger.info("CPU: %.2f Memory left: %sMb",
+                        cpu, memory.available / MB)
         yield from asyncio.sleep(10)
 
 
@@ -56,13 +59,14 @@ def runWebserver(bp):
 
     @asyncio.coroutine
     def latest(request):
-        log.info(request.remote + " is refreshing the image with reload="+str(request.query.get('refresh', False)))
+        log.info(request.remote + " is refreshing the image with reload=" +
+                 str(request.query.get('refresh', False)))
         refresh = request.query.get("refresh") is not None
         body = yield from bp.getLastPictureAsBytes(refresh)
         return web.Response(
             body=body,
             content_type="image/png",
-            headers={"picture-time": "%s" % bp.getLastPictureTimestamp(),},
+            headers={"picture-time": "%s" % bp.getLastPictureTimestamp(), },
         )
 
     def imok(request):
@@ -88,20 +92,27 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable writing stats to separate file for performance debugging. Requires psutil package",
     )
-    
+
     args = parser.parse_args()
-    babyphone.initLogger()
     log.info("starting Server")
+    bp = None
     try:
+
         bp = babyphone.Babyphone(loop)
+
+        telebot = telegram.TeleBaby(bp)
+
         if args.writeStats:
             asyncio.ensure_future(writeStats())
 
         loop.add_signal_handler(signal.SIGINT, signalStop)
         log.info("starting websockets server")
         discovery.createDiscoveryServer(loop)
+        loop.run_until_complete(telebot.start())
         loop.run_until_complete(websockets.serve(bp.connect, "0.0.0.0", 8080))
         loop.run_until_complete(runWebserver(bp))
+
         loop.run_forever()
     finally:
-        bp.close()
+        if bp:
+            bp.close()

@@ -30,7 +30,6 @@ class MotionDetect(object):
         self._maxVals = 20
         self._movementValues = []
 
-
     def start(self):
         self._runner = asyncio.ensure_future(self._run())
 
@@ -58,7 +57,7 @@ class MotionDetect(object):
 
             # let the camera adjust to the new light settings
             if highRes:
-                self._bp.cam.resolution=(800, 600)
+                self._bp.cam.resolution = (800, 600)
             self._bp.cam.capture(stream, format="jpeg")
 
             # Construct a numpy array from the stream
@@ -74,8 +73,6 @@ class MotionDetect(object):
 
             if nightMode:
                 self._bp.setLights(False)
-
-
 
     @asyncio.coroutine
     def _calcMovement(self, img1, img2):
@@ -94,25 +91,26 @@ class MotionDetect(object):
             if self.lastPictureTimestamp is not None and time.time() < self.lastPictureTimestamp+self._nextPictureDelay():
                 continue
 
-            if self._bp.isAnyoneStreaming():
-                self.log.info(
-                    "at least one connection is streaming, camera is busy, cannot do motion detection"
-                )
-                continue
-
             try:
                 oldPicture, newPicture = yield from self.updatePicture()
-                if newPicture is not None:
+                if oldPicture is not None and newPicture is not None:
                     yield from self._detectMovement(oldPicture, newPicture)
 
             except asyncio.CancelledError:
-                self.log.info("Stopping motion detection as the task was cancelled")
+                self.log.info(
+                    "Stopping motion detection as the task was cancelled")
                 return
             except Exception as e:
                 self.log.info("Error taking picture: %s", e)
 
     @asyncio.coroutine
     def updatePicture(self, highRes=False):
+        if self._bp.isAnyoneStreaming():
+            self.log.info(
+                "at least one connection is streaming, camera is busy, cannot do motion detection"
+            )
+            return (None, None)
+
         picture = yield from self._takePicture(self._bp.nightMode, highRes)
 
         # taking picture failed for some reason
@@ -125,10 +123,12 @@ class MotionDetect(object):
         # it seems to be too dark or too bright, let's try different
         # mode next time
         if brightness == -1:
-            self.log.info("Image is too dark, will try in night mode next time")
+            self.log.info(
+                "Image is too dark, will try in night mode next time")
             yield from self._bp.setNightMode(True)
         elif brightness == 1:
-            self.log.info("Image is too bright, will try in day mode next time")
+            self.log.info(
+                "Image is too bright, will try in day mode next time")
             yield from self._bp.setNightMode(False)
 
         oldPicture = self.lastPicture
@@ -165,7 +165,7 @@ class MotionDetect(object):
         else:
             self._moved = False
 
-        yield from self._bp.broadcast(
+        yield from self._bp.broadcastMovement(
             {
                 "action": "movement",
                 "movement": dict(
@@ -178,7 +178,6 @@ class MotionDetect(object):
 
         return moved
 
-
     def _imageBrightness(self, img):
         hist = cv2.calcHist([img], [0], None, [10], [0, 256])
 
@@ -186,7 +185,7 @@ class MotionDetect(object):
         if float(hist[0]) / float(img.size) > 0.99:
             return -1
 
-        #too bright
+        # too bright
         if float(hist[-1]) / float(img.size) > 0.7:
             return 1
 

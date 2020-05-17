@@ -40,8 +40,9 @@ setup(
         'websockets',
         'psutil',
         'RPi.GPIO',
-        'aiohttp',
         'pyalsaaudio',
         'scikit-image',
-        ],
+        'aiogram==2.8',
+        'aiohttp[speedups]==3.6.2',
+    ],
 )

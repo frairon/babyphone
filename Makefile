@@ -8,7 +8,7 @@ install-bp:
 
 remote-install:
 	ssh ${BP_HOST} 'mkdir -p /home/pi/babyphone'
-	rsync -av . --exclude app --exclude-from .gitignore --exclude .git ${BP_HOST}:/home/pi/babyphone/
+	rsync -av . --exclude .history --exclude app --exclude-from .gitignore --exclude .git ${BP_HOST}:/home/pi/babyphone/
 	ssh ${BP_HOST} 'cd /home/pi/babyphone && sudo python3 setup.py install'
 	ssh ${BP_HOST} 'sudo systemctl restart babyphone'
 

@@ -15,3 +15,8 @@ venv/
 babyphone/__pycache__
 babyphone.egg-info
 dist
+
+.vscode
+.settings
+.project
+app/.classpath
