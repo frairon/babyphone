@@ -123,7 +123,6 @@ class Session(object):
 
         if message['text'] == self.ButtonDisconnect:
             await self.disconnect()
-            await self.sendGoodBye()
         elif message['text'] == self.ButtonStatus:
             res = await self._bot.send_chat_action(self._chatId, action="upload_photo")
             if not res:
@@ -189,6 +188,7 @@ Configuration:
 
         self.connected = False
         self._babyphone.removeConnection(self)
+        await self.sendGoodBye()
 
     def __str__(self):
         return "Telegram connection %s" % self._chatId
@@ -249,7 +249,6 @@ class TeleBaby(object):
                     self.log.info(
                         "removing chat with chatId %s from babyphone", chatId)
                     await session.disconnect()
-                    await session.sendGoodBye()
 
     async def _handleMessage(self, message):
 

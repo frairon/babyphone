@@ -345,7 +345,7 @@ class Babyphone(object):
             self.log.info(
                 "connection %s cannot be removed, it's not connected", conn)
             return
-
+        self.conns.remove(conn)
         self.log.info("Removed connection, we have now %s", self.conns)
 
         if len(self.conns) == 0:

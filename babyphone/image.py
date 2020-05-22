@@ -2,6 +2,7 @@ import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import matplotlib.dates as dates
 from PIL import Image
 import io
 
@@ -30,6 +31,8 @@ def createImage(pictureArray, volumes, dpi=72, chartHeight=0.2):
                         top=None, wspace=None, hspace=0.0)
 
     volAx.patch.set_alpha(0.0)
+    # volAx.xaxis.set_major_locator(dates.AutoDateLocator(
+    # maxticks=4, interval_multiples=True))
     volAx.tick_params(
         bottom=False,
         left=False,
@@ -55,7 +58,7 @@ def createImage(pictureArray, volumes, dpi=72, chartHeight=0.2):
                 for x in volumes]
     volumesY = [x[1]*100 for x in volumes]
 
-    volAx.plot(volumesX, volumesY, linewidth=3)
+    volAx.plot(volumesX, volumesY, linewidth=4)
 
     # save the voulme chart
     buf = io.BytesIO()
