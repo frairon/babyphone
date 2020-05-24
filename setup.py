@@ -44,5 +44,6 @@ setup(
         'scikit-image',
         'aiogram==2.8',
         'aiohttp[speedups]==3.6.2',
+        'emoji==0.5.4',
     ],
 )

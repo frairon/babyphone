@@ -2,3 +2,4 @@
 /gst-build*
 .externalNativeBuild/
 src/assets/
+.mypy_cache

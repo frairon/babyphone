@@ -31,8 +31,8 @@ def createImage(pictureArray, volumes, dpi=72, chartHeight=0.2):
                         top=None, wspace=None, hspace=0.0)
 
     volAx.patch.set_alpha(0.0)
-    # volAx.xaxis.set_major_locator(dates.AutoDateLocator(
-    # maxticks=4, interval_multiples=True))
+    volAx.xaxis.set_major_locator(dates.MinuteLocator())
+    volAx.xaxis.set_major_formatter(dates.DateFormatter("%H:%M"))
     volAx.tick_params(
         bottom=False,
         left=False,
@@ -56,7 +56,7 @@ def createImage(pictureArray, volumes, dpi=72, chartHeight=0.2):
     # plot the volume values
     volumesX = [datetime.datetime.fromtimestamp(x[0])
                 for x in volumes]
-    volumesY = [x[1]*100 for x in volumes]
+    volumesY = [x[1] for x in volumes]
 
     volAx.plot(volumesX, volumesY, linewidth=4)
 

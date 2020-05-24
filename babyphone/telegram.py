@@ -1,15 +1,24 @@
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types.reply_keyboard import ReplyKeyboardMarkup, KeyboardButton
+import datetime
+import emoji
 import logging
 import io
 import asyncio
 import collections
 import time
 import aiohttp
+import numpy as np
 import json
+import typing
 from babyphone.secret import token, whitelistedUsers
 from babyphone.image import createImage
-import cv2
+
+
+class NoiseLevel(typing.NamedTuple):
+    level: float
+    label: str
+    button: str
 
 
 class Session(object):
@@ -33,8 +42,20 @@ class Session(object):
     ButtonConfigNightMode = "Enable Nightmode"
     ButtonConfigDisableNightMode = "Disable Nightmode"
 
+    ButtonAlarmDisable = "Disable Alarm"
+    ButtonAlarmEnable = "Enable Alarm"
+    ButtonAlarmSnooze15 = "Snooze Alarm"
+
     # number of seconds to store volume history
     volumeHistory = 120
+
+    _noiseLevelLow = NoiseLevel(
+        level=-0.1, label="low", button="Noise Level Low")
+    _noiseLevelMedium = NoiseLevel(level=0, label="medium", button="medium")
+    _noiseLevelHigh = NoiseLevel(level=0.1, label="high", button="high")
+
+    _alarmStateEnabled = 'Enabled'
+    _alarmStateDisabled = 'Disabled'
 
     def __init__(self, chatId, bot, babyphone):
         self.connected = False
@@ -53,7 +74,20 @@ class Session(object):
         self._lastMessageId = 0
         self._lastMessageSent = 0
 
-        self._alarm = None
+        self._alarmTrigger = self._noiseLevelMedium
+        self._alarmState = self._alarmStateEnabled
+        self._alarmLastTrigger = None
+        # will be set to a time after which the alarm should be enabled again
+        self._alarmEnableTime = None
+        # the last message we sent as an alarm
+        self._alarmSent = None
+
+        # after this time of no threshold exceeding, we'll return to normal operation
+        self._alarmCooldownTimer = 20
+
+        # after this time during alarm, we'll resent the alarm
+        self._alarmIntervalTimeout = 10
+
         self._volumes = []
 
     def streamRequested(self):
@@ -71,11 +105,53 @@ class Session(object):
         pass
 
     async def sendVolume(self, level):
-        self._volumes.append([time.time(), level])
+        self._volumes.append([time.time(), level*100])
 
         if len(self._volumes) > self.volumeHistory:
             self._volumes = self._volumes[len(
                 self._volumes)-self.volumeHistory:]
+        await self._checkAlarm()
+
+    async def _checkAlarm(self):
+
+        if self._alarmEnableTime:
+            if time.time() > self._alarmEnableTime:
+                self._alarmState = self._alarmStateEnabled
+                await self._bot.send_message(self._chatId, "Snoozing done. Enabling Alarm again.", reply_markup=self.getMenuKeys())
+                self._alarmEnableTime = None
+
+        if len(self._volumes) < 20:
+            return
+
+        levels = np.array([x[1] for x in self._volumes])
+        quants = np.quantile(levels, [0.5, 0.75])
+
+        threshold = quants[0] + quants[1] + 10
+
+        threshold += threshold*self._alarmTrigger.level
+
+        if levels[-1] > threshold:
+            await self.updatedAction()
+            # do nothing if the alarm is disabled
+            if self._alarmState == self._alarmStateDisabled:
+                return
+
+            # we already sent the alarm a few seconds ago
+            if self._alarmSent and (datetime.datetime.now() - self._alarmSent['date']).seconds < self._alarmIntervalTimeout:
+                return
+            else:  # let's send an alarm
+                self._alarmSent = await self._bot.send_message(self._chatId,
+                                                               emoji.emojize(
+                                                                   ":bangbang:Noise Alarm:bangbang:", use_aliases=True),
+                                                               reply_markup=self.getAlarmKeys())
+        else:
+            await self.updatedAction()
+            if self._alarmSent and (datetime.datetime.now() - self._alarmSent['date']).seconds > self._alarmCooldownTimer:
+                await self._bot.send_message(chat_id=self._chatId,
+                                             text=emoji.emojize(
+                                                 ":white_check_mark: Seems quiet again", use_aliases=True),
+                                             reply_markup=self.getMenuKeys())
+                self._alarmSent = None
 
     async def sendMovement(self, movement):
         # todo handle movement
@@ -86,13 +162,29 @@ class Session(object):
         pass
 
     async def sendSystemStatus(self, status):
-        # todo handle systemstatus
-        pass
+        if not self.connected:
+            return
+
+        if status == "shutdown":
+            await self.sendGoodBye(self._chatId, "Babyphone shutting down. See ya.")
+        elif status == "restart":
+            await self.sendGoodBye(self._chatId, "Babyphone restarting now. You have to reconnect manually.")
+        else:
+            await self._bot.send_message(self._chatId, "Babyphone updated system status: {}".format(status), reply_markup=self.getMenuKeys())
 
     def getMenuKeys(self):
         return (ReplyKeyboardMarkup(
             resize_keyboard=True)
             .row(self.ButtonStatus)
+            .row(self.ButtonConfig,
+                 self.ButtonDisconnect)
+        )
+
+    def getAlarmKeys(self):
+        return (ReplyKeyboardMarkup(
+            resize_keyboard=True)
+            .row(self.ButtonStatus)
+            .row(self.ButtonAlarmSnooze15, self.ButtonAlarmDisable)
             .row(self.ButtonConfig,
                  self.ButtonDisconnect)
         )
@@ -106,6 +198,9 @@ class Session(object):
             resize_keyboard=True)
             .row(self.ButtonConfigBack)
             .row(self.ButtonConfigDisableNightMode if self._babyphone.nightMode else self.ButtonConfigNightMode)
+            .row(self.ButtonAlarmDisable if self._alarmState == self._alarmStateEnabled else self.ButtonAlarmEnable,
+                 self.ButtonAlarmSnooze15)
+            .row(self._noiseLevelLow.button, self._noiseLevelMedium.button, self._noiseLevelHigh.button)
         )
 
     async def updatedAction(self):
@@ -121,6 +216,9 @@ class Session(object):
 
     async def handleMessage(self, message):
 
+        if message['text'] != self.ButtonDisconnect:
+            await self.updatedAction()
+
         if message['text'] == self.ButtonDisconnect:
             await self.disconnect()
         elif message['text'] == self.ButtonStatus:
@@ -132,7 +230,7 @@ class Session(object):
             _, picture = await self._babyphone.motion.updatePicture(highRes=True)
             if picture is not None:
                 imageData = createImage(picture, self._volumes)
-                # imageData = cv2.imencode(".png", picture)[1].tostring()
+
                 await self._bot.send_photo(self._chatId,
                                            types.input_file.InputFile(
                                                imageData,
@@ -140,9 +238,7 @@ class Session(object):
                                                conf=dict(mime_type='application/octet-stream')),
                                            reply_markup=self.getMenuKeys())
 
-            await self.updatedAction()
         elif message['text'] in [self.ButtonConnect, self.ButtonReconnect, self.ButtonYes]:
-            await self.updatedAction()
             await self.sendMenu()
         elif message['text'] == self.ButtonConfig:
             await self.showConfig()
@@ -154,21 +250,63 @@ class Session(object):
         elif message['text'] == self.ButtonConfigDisableNightMode:
             await self._babyphone.setNightMode(False)
             await self.showConfig()
+        elif message['text'] == self.ButtonAlarmDisable:
+            if self._alarmState == self._alarmStateEnabled:
+                self._alarmState = self._alarmStateDisabled
+                self._alarmLastTrigger = None
+                self._alarmSent = None
+                self._alarmEnableTime = None
+                await self._bot.send_message(self._chatId, "Alarm disabled.", reply_markup=self.getMenuKeys())
+        elif message['text'] == self.ButtonAlarmEnable:
+            if self._alarmState == self._alarmStateDisabled:
+                self._alarmState = self._alarmStateEnabled
+                self._alarmEnableTime = None
+                await self._bot.send_message(self._chatId, "Alarm enabled.", reply_markup=self.getMenuKeys())
+        elif message['text'] == self.ButtonAlarmSnooze15:
+            # TODO: extract disabling to function
+            self._alarmState = self._alarmStateDisabled
+            self._alarmLastTrigger = None
+            self._alarmSent = None
+            # TODO: set real timeout
+            self._alarmEnableTime = time.time()+60*15
+            await self._bot.send_message(self._chatId, "Snoozing alarm for 15 minutes.", reply_markup=self.getMenuKeys())
+        elif message['text'] == self._noiseLevelLow.button:
+            self._alarmTrigger = self._noiseLevelLow
+            await self._bot.send_message(self._chatId, "Alarm noise level set to " + self._noiseLevelLow.label)
+        elif message['text'] == self._noiseLevelMedium.button:
+            self._alarmTrigger = self._noiseLevelMedium
+            await self._bot.send_message(self._chatId, "Alarm noise level set to " + self._noiseLevelMedium.label)
+        elif message['text'] == self._noiseLevelHigh.button:
+            self._alarmTrigger = self._noiseLevelHigh
+            await self._bot.send_message(self._chatId, "Alarm noise level set to " + self._noiseLevelHigh.label)
         else:
             await self.sendMenu(message="I didn't understand you. Try the buttons")
 
     async def showConfig(self):
+        alarmState = ""
+        if self._alarmState == self._alarmStateDisabled:
+            if self._alarmEnableTime:
+                alarmState = "Snoozing ({} minutes left)".format(
+                    int((self._alarmEnableTime - time.time()) / 60))
+            else:
+                alarmState = "Disabled"
+        else:
+            alarmState = "Enabled"
 
         configuration = """
 Configuration:
+- Alarm {alarmEnabled}
+    - Noise level {alarmTrigger}
 - Night mode {nightmode}
-""".format(nightmode="On" if self._babyphone.nightMode else "Off")
+""".format(nightmode="On" if self._babyphone.nightMode else "Off",
+           alarmTrigger=self._alarmTrigger.label,
+            alarmEnabled=alarmState)
 
         await self._bot.send_message(
             self._chatId, configuration, reply_markup=self.getConfigMenu())
 
-    async def sendGoodBye(self):
-        await self._bot.send_message(self._chatId, "Goodbye!", reply_markup=ReplyKeyboardMarkup(
+    async def sendGoodBye(self, message="GoodBye!"):
+        await self._bot.send_message(self._chatId, message, reply_markup=ReplyKeyboardMarkup(
             resize_keyboard=True)
             .row(KeyboardButton(self.ButtonReconnect))
         )
@@ -197,7 +335,7 @@ Configuration:
 
         # we're not connected at all, so no need to check
         if not self.connected:
-            return False
+            return (False, False)
 
         timeSinceLastAction = time.time() - self._lastAction
         if timeSinceLastAction > self.SessionTimeout:
@@ -211,11 +349,11 @@ Configuration:
                                                  .row(KeyboardButton(self.ButtonDisconnect))
                                                  )
                     self._promptReconnect = True
-                return True
+                return (True, False)
             else:
-                return False
+                return (False, True)
 
-        return True
+        return (True, False)
 
 
 class TeleBaby(object):
@@ -234,7 +372,7 @@ class TeleBaby(object):
     async def start(self):
         asyncio.create_task(self._watchSessions())
         asyncio.create_task(self._dp.start_polling(
-            reset_webhook=False, timeout=20, relax=0.1, fast=True))
+            reset_webhook=False, timeout=60, relax=1, fast=True))
 
     async def _watchSessions(self):
         while True:
@@ -242,10 +380,10 @@ class TeleBaby(object):
             for chatId in list(self._sessions.keys()):
                 session = self._sessions[chatId]
 
-                isAlive = await session.checkAlive()
+                isAlive, isTimedout = await session.checkAlive()
 
                 # if the session is dead, remove it from the set
-                if not isAlive:
+                if not isAlive and isTimedout:
                     self.log.info(
                         "removing chat with chatId %s from babyphone", chatId)
                     await session.disconnect()

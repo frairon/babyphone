@@ -20,3 +20,4 @@ dist
 .settings
 .project
 app/.classpath
+.mypy_cache

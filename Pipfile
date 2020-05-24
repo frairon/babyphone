@@ -11,6 +11,8 @@ aiohttp = {extras = ["speedups"],version = "*"}
 aiogram = "*"
 matplotlib = "*"
 pillow = "*"
+mypy = "*"
+emoji = "*"
 
 [requires]
 python_version = "3"
