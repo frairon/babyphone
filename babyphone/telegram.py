@@ -166,9 +166,9 @@ class Session(object):
             return
 
         if status == "shutdown":
-            await self.sendGoodBye(self._chatId, "Babyphone shutting down. See ya.")
+            await self.sendGoodBye("Babyphone shutting down. See ya.")
         elif status == "restart":
-            await self.sendGoodBye(self._chatId, "Babyphone restarting now. You have to reconnect manually.")
+            await self.sendGoodBye("Babyphone restarting now. You have to reconnect manually.")
         else:
             await self._bot.send_message(self._chatId, "Babyphone updated system status: {}".format(status), reply_markup=self.getMenuKeys())
 
