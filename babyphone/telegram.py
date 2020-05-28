@@ -13,6 +13,7 @@ import json
 import typing
 from babyphone.secret import token, whitelistedUsers
 from babyphone.image import createImage
+from concurrent.futures import ProcessPoolExecutor
 
 
 class NoiseLevel(typing.NamedTuple):
@@ -56,6 +57,8 @@ class Session(object):
 
     _alarmStateEnabled = 'Enabled'
     _alarmStateDisabled = 'Disabled'
+
+    _executor = ProcessPoolExecutor(max_workers=2)
 
     def __init__(self, chatId, bot, babyphone):
         self.connected = False
@@ -105,7 +108,7 @@ class Session(object):
         pass
 
     async def sendVolume(self, level):
-        self._volumes.append([time.time(), level*100])
+        self._volumes.append([datetime.datetime.now(), level*100])
 
         if len(self._volumes) > self.volumeHistory:
             self._volumes = self._volumes[len(
@@ -145,8 +148,9 @@ class Session(object):
                                                                    ":bangbang:Noise Alarm:bangbang:", use_aliases=True),
                                                                reply_markup=self.getAlarmKeys())
         else:
-            await self.updatedAction()
+
             if self._alarmSent and (datetime.datetime.now() - self._alarmSent['date']).seconds > self._alarmCooldownTimer:
+                await self.updatedAction()
                 await self._bot.send_message(chat_id=self._chatId,
                                              text=emoji.emojize(
                                                  ":white_check_mark: Seems quiet again", use_aliases=True),
@@ -166,7 +170,7 @@ class Session(object):
             return
 
         if status == "shutdown":
-            await self.sendGoodBye("Babyphone shutting down. See ya.")
+            await self.sendGoodBye("Babyphone is shutting down. See ya.")
         elif status == "restart":
             await self.sendGoodBye("Babyphone restarting now. You have to reconnect manually.")
         else:
@@ -229,7 +233,8 @@ class Session(object):
 
             _, picture = await self._babyphone.motion.updatePicture(highRes=True)
             if picture is not None:
-                imageData = createImage(picture, self._volumes)
+                loop = asyncio.get_running_loop()
+                imageData = await loop.run_in_executor(self._executor, createImage, picture, self._volumes)
 
                 await self._bot.send_photo(self._chatId,
                                            types.input_file.InputFile(
@@ -411,3 +416,7 @@ class TeleBaby(object):
         await session.connect()
 
         await session.handleMessage(message)
+
+
+# VERSUCH MAL WETTETR DATEN HOCHZULADEN:
+# http: // wttr.in/Dresden.png?format = v2

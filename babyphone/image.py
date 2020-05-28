@@ -54,8 +54,7 @@ def createImage(pictureArray, volumes, dpi=72, chartHeight=0.2):
     volAx.set_ylim(0, 100)
 
     # plot the volume values
-    volumesX = [datetime.datetime.fromtimestamp(x[0])
-                for x in volumes]
+    volumesX = [x[0] for x in volumes]
     volumesY = [x[1] for x in volumes]
 
     volAx.plot(volumesX, volumesY, linewidth=4)
