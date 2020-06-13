@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import CancelledError, ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor, TimeoutError
 
 import alsaaudio
 import cv2
@@ -39,7 +39,6 @@ class Babyphone(object):
         gpio.setmode(gpio.BCM)
         gpio.setup(self.LIGHTS_GPIO, gpio.OUT)
 
-        self.executor = ThreadPoolExecutor(max_workers=4)
         self._running = threading.Event()
         self._streamingTask = None
 
@@ -63,8 +62,9 @@ class Babyphone(object):
         self.log.info("Starting babyphone")
 
         self._running.set()
+        self.executor = ThreadPoolExecutor(max_workers=1)
         self.log.debug("starting audio level checker")
-        self.executor.submit(self._startAudioMonitoring)
+        self._audioRunner = self.executor.submit(self._startAudioMonitoring)
         self.log.debug("...done")
 
         # self.log.debug("starting motion detection")
@@ -81,18 +81,29 @@ class Babyphone(object):
             self.log.warn(
                 "Babyphone stop called but it seems not to be running. Ignoring")
             return
-
         self.log.info("Stopping babyphone")
         self._running.clear()
 
+        # stopping audio
+        if self._audioRunner:
+            self._audioRunner.cancel()
+            try:
+                # try to wait one second until its stopped and geht the error
+                exp = self._audioRunner.exception(1)
+                if exp:
+                    self.log.error(
+                        "Error while stopping audio runner: %s", exp)
+            except TimeoutError:
+                self.log.warn("Stopping the audio runner timed out.")
+
         self.motion.stop()
         self.cam.close()
+        self.executor.shutdown()
 
     def close(self):
         self.log.info("closing babyphone")
         self.stop()
         self.log.debug("shutting down thread pool executor")
-        self.executor.shutdown()
         gpio.cleanup()
 
     @asyncio.coroutine
@@ -202,6 +213,8 @@ class Babyphone(object):
         except Exception as e:
             self.log.error("Error monitoring audio")
             self.log.exception(e)
+
+        self.log.info("Audio monitoring stopped.")
 
     async def broadcastVolume(self, level):
         # TODO: use multicast for connections that want it
@@ -332,13 +345,12 @@ class Babyphone(object):
         yield from asyncio.sleep(2)
         subprocess.check_call(["sudo", "shutdown", "-r", "0"])
 
-    @asyncio.coroutine
-    def connect(self, websocket, path):
+    async def connect(self, websocket, path):
         c = Connection(self, websocket)
 
-        yield from self.addConnection(c)
+        await self.addConnection(c)
 
-        yield from c.run()
+        await c.run()
 
     def removeConnection(self, conn):
         if conn not in self.conns:

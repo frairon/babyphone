@@ -32,13 +32,12 @@ class Connection(object):
     def audioRequested(self):
         return self._audioRequested
 
-    @asyncio.coroutine
-    def run(self):
+    async def run(self):
         try:
             while True:
-                message = yield from self._ws.recv()
+                message = await self._ws.recv()
                 try:
-                    yield from self._handleMessage(message)
+                    await self._handleMessage(message)
                 except Exception as e:
                     logging.error(
                         "Error handling message: %s (%s)", message, e)
@@ -48,18 +47,17 @@ class Connection(object):
         except websockets.exceptions.ConnectionClosed as e:
             logging.info("websocket closed. terminating connection")
         finally:
-            yield from self._disconnect()
+            await self._disconnect()
 
-    @asyncio.coroutine
-    def _runHeartbeat(self):
+    async def _runHeartbeat(self):
         logging.info("Starting heartbeating to client")
         while True:
             try:
-                yield from self._send({"action": "heartbeat"})
+                await self._send({"action": "heartbeat"})
             except websockets.exceptions.ConnectionClosed as e:
                 return
 
-            yield from asyncio.sleep(1)
+            await asyncio.sleep(1)
 
     async def sendAudioPacket(self, data, pts):
         msg = dict(
@@ -95,30 +93,28 @@ class Connection(object):
         )
         await self._send(msg)
 
-    @asyncio.coroutine
-    def _send(self, obj):
-        yield from self._ws.send(json.dumps(obj))
+    async def _send(self, obj):
+        await self._ws.send(json.dumps(obj))
 
-    @asyncio.coroutine
-    def _handleMessage(self, message):
+    async def _handleMessage(self, message):
         msg = json.loads(message)
         if "action" not in msg:
             raise InvalidMessageException("action not in message")
 
         if msg["action"] == "shutdown":
-            yield from self.bp.shutdown(self)
+            await self.bp.shutdown(self)
         elif msg["action"] == "restart":
-            yield from self.bp.restart(self)
+            await self.bp.restart(self)
         elif msg["action"] == "startstream":
             self.state = self.STREAMING
         elif msg["action"] == "stopstream":
             self.state = self.IDLE
         elif msg["action"] == "_startstream":
             self._streamRequested = True
-            yield from self.bp.streamStatusUpdated()
+            await self.bp.streamStatusUpdated()
         elif msg["action"] == "_stopstream":
             self._streamRequested = False
-            yield from self.bp.streamStatusUpdated()
+            await self.bp.streamStatusUpdated()
         elif msg["action"] == "startaudio":
             self._audioRequested = True
         elif msg["action"] == "stopaudio":
@@ -130,16 +126,15 @@ class Connection(object):
                 self.motion.stop()
         elif msg["action"] == "configuration_update":
             # update the config
-            yield from self.bp.updateConfig(msg.get("configuration", {}))
+            await self.bp.updateConfig(msg.get("configuration", {}))
 
         elif msg["action"] == "configuration_request":
-            yield from self.bp.broadcastConfig()
+            await self.bp.broadcastConfig()
         else:
             logging.error(
                 "Unhandled message from connection %s: %s", self, message)
 
-    @asyncio.coroutine
-    def _disconnect(self):
+    async def _disconnect(self):
         logging.info("disconnecting websocket")
         try:
             self._heartbeat.cancel()

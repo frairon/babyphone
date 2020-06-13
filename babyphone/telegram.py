@@ -13,7 +13,7 @@ import json
 import typing
 from babyphone.secret import token, whitelistedUsers
 from babyphone.image import createImage
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 
 class NoiseLevel(typing.NamedTuple):
@@ -58,7 +58,7 @@ class Session(object):
     _alarmStateEnabled = 'Enabled'
     _alarmStateDisabled = 'Disabled'
 
-    _executor = ProcessPoolExecutor(max_workers=2)
+    _executor = ThreadPoolExecutor(max_workers=2)
 
     def __init__(self, chatId, bot, babyphone):
         self.connected = False
@@ -234,7 +234,7 @@ class Session(object):
             _, picture = await self._babyphone.motion.updatePicture(highRes=True)
             if picture is not None:
                 loop = asyncio.get_running_loop()
-                imageData = await loop.run_in_executor(self._executor, createImage, picture, self._volumes)
+                imageData = await loop.run_in_executor(self._executor, createImage, picture, list(self._volumes))
 
                 await self._bot.send_photo(self._chatId,
                                            types.input_file.InputFile(
