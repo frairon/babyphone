@@ -47,6 +47,8 @@ class Session(object):
     ButtonAlarmEnable = "Enable Alarm"
     ButtonAlarmSnooze15 = "Snooze Alarm"
 
+    ButtonWeather = emoji.emojize(":partly_sunny:", use_aliases=True)
+
     # number of seconds to store volume history
     volumeHistory = 120
 
@@ -179,9 +181,8 @@ class Session(object):
     def getMenuKeys(self):
         return (ReplyKeyboardMarkup(
             resize_keyboard=True)
-            .row(self.ButtonStatus)
-            .row(self.ButtonConfig,
-                 self.ButtonDisconnect)
+            .row(self.ButtonStatus, self.ButtonWeather)
+            .row(self.ButtonConfig, self.ButtonDisconnect)
         )
 
     def getAlarmKeys(self):
@@ -284,6 +285,15 @@ class Session(object):
         elif message['text'] == self._noiseLevelHigh.button:
             self._alarmTrigger = self._noiseLevelHigh
             await self._bot.send_message(self._chatId, "Alarm noise level set to " + self._noiseLevelHigh.label)
+        elif message['text'] == self.ButtonWeather:
+            async with aiohttp.ClientSession() as session:
+                async with session.get("http://wttr.in/Dresden.png?format=v2") as resp:
+                    await self._bot.send_photo(self._chatId,
+                                               types.input_file.InputFile(
+                                                   io.BytesIO(await resp.read()),
+                                                   filename='weather.png',
+                                                   conf=dict(mime_type='application/octet-stream')),
+                                               reply_markup=self.getMenuKeys())
         else:
             await self.sendMenu(message="I didn't understand you. Try the buttons")
 
@@ -394,14 +404,11 @@ class TeleBaby(object):
                     await session.disconnect()
 
     async def _handleMessage(self, message):
-
-        self.log.info(message)
         # only handle the message if it is from our whitelisted user
         if message['from']['id'] in whitelistedUsers:
-            # just ignore messages from users not in our white list
             await self.handleMessage(message)
         else:
-            # we could think to setup an admin user, that gets informed if there are other requests
+            # just ignore messages from users not in our white list
             self.log.info("ignoring message %s from unauthorized user %s",
                           message, message['from']['id'])
 
