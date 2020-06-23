@@ -28,7 +28,7 @@ class Session(object):
     SessionTimeout = 3600
     SessionCheckTimeoutInterval = 10
     # seconds, a user has time to respond until the session will be kicked.
-    SessionTimeoutGracePeriod = 120
+    SessionTimeoutGracePeriod = 300
     # kick time
     SessionTimeoutKick = SessionTimeout + SessionTimeoutGracePeriod
 
@@ -42,6 +42,10 @@ class Session(object):
     ButtonConfigBack = "Back"
     ButtonConfigNightMode = "Enable Nightmode"
     ButtonConfigDisableNightMode = "Disable Nightmode"
+
+    ButtonShutdown = emoji.emojize("Shutdown :warning:", use_aliases=True)
+    ButtonRestart = emoji.emojize(
+        "Restart :arrows_clockwise:", use_aliases=True)
 
     ButtonAlarmDisable = "Disable Alarm"
     ButtonAlarmEnable = "Enable Alarm"
@@ -206,6 +210,7 @@ class Session(object):
             .row(self.ButtonAlarmDisable if self._alarmState == self._alarmStateEnabled else self.ButtonAlarmEnable,
                  self.ButtonAlarmSnooze15)
             .row(self._noiseLevelLow.button, self._noiseLevelMedium.button, self._noiseLevelHigh.button)
+            .row(self.ButtonRestart, self.ButtonShutdown)
         )
 
     async def updatedAction(self):
@@ -294,6 +299,10 @@ class Session(object):
                                                    filename='weather.png',
                                                    conf=dict(mime_type='application/octet-stream')),
                                                reply_markup=self.getMenuKeys())
+        elif message['text'] == self.ButtonShutdown:
+            await self._babyphone.shutdown(self)
+        elif message['text'] == self.ButtonRestart:
+            await self._babyphone.restart(self)
         else:
             await self.sendMenu(message="I didn't understand you. Try the buttons")
 
@@ -330,6 +339,10 @@ Configuration:
         # already connected
         if self.connected:
             return
+
+        # get rid of old volumes from previous connections, otherwise they'll mess
+        # up chart generation
+        self._volumes = []
 
         self.connected = True
         await self._babyphone.addConnection(self)
