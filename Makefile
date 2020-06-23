@@ -32,7 +32,9 @@ sys-setup:
 # taken and adopted from
 # https://gist.github.com/ajfisher/a84889e64565d7a74888
 hotspot-setup:
-	apt-get install hostapd wpasupplicant dnsmasq
+	sudo apt-get install hostapd wpasupplicant dnsmasq
+	sudo update-rc.d -f hostapd remove
+	sudo update-rc.d -f dnsmasq remove
 
 
 push2babyphone-dev:
