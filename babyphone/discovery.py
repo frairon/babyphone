@@ -7,7 +7,15 @@ class DiscoveryServer(asyncio.DatagramProtocol):
 
     def __init__(self, *args, **kwargs):
         asyncio.DatagramProtocol.__init__(self, *args, **kwargs)
-        self._host = socket.gethostbyaddr(self._get_ip())
+        self._ip = self._get_ip()
+        # let's assume the hostname is the IP until we know better
+        self._hostname = self._ip
+        try:
+            resolved = socket.gethostbyaddr(self._ip)
+            self._hostname = resolved[0]
+        except socket.herror:
+            # if we can't resolve the name, let's just the IP
+            pass
 
     def _get_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -34,9 +42,10 @@ class DiscoveryServer(asyncio.DatagramProtocol):
     def advertise(self):
         self._transport.sendto(json.dumps(dict(
             action='advertise',
-            host=self._host[0],
-            ip = self._host[2][0])).encode('utf-8'),
+            host=self._hostname,
+            ip=self._ip)).encode('utf-8'),
             ('<broadcast>', 31634))
+
 
 def createDiscoveryServer(loop):
     print("creating socket")
